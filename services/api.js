@@ -181,8 +181,14 @@ export const usersAPI = {
 // ─── Activity Types ───────────────────────────────────────────────────────────
 export const activityTypesAPI = {
   /**
-   * List activity types, optionally filtered by department
-   * GET /activity-types?department=Marketing
+   * List departments with activity counts
+   * GET /activity-types/departments
+   */
+  departments: () => api.get('/activity-types/departments'),
+
+  /**
+   * List activity types, optionally filtered by department/season
+   * GET /activity-types?department=Production&season=Post-Season
    */
   list: (params = {}) => api.get('/activity-types', { params }),
 };
@@ -223,10 +229,17 @@ export const attendanceAPI = {
   report: (params = {}) => api.get('/attendance/report', { params }),
 
   /**
-   * Team attendance (OWNER/MANAGER)
+   * Team attendance (OWNER/MANAGER) — single date
    * GET /attendance/team?date=2025-05-05
    */
   team: (params = {}) => api.get('/attendance/team', { params }),
+
+  /**
+   * Full team attendance history for a month (OWNER/MANAGER)
+   * GET /attendance/team/monthly?month=2025-05
+   * Returns all records for the month grouped by date, sorted date desc
+   */
+  teamMonthly: (params = {}) => api.get('/attendance/team/monthly', { params }),
 
   /**
    * Add a GPS waypoint for live tracking
@@ -241,6 +254,15 @@ export const attendanceAPI = {
    * Only call this when km >= 5 — client-side gate to reduce API calls
    */
   getWaypoints: (attendanceId) => api.get(`/attendance/${attendanceId}/waypoints`),
+
+  /**
+   * Get road-snapped route polyline for an attendance record (OWNER/MANAGER only)
+   * GET /attendance/:id/route
+   * Returns { polyline: [{lat, lng}, ...], waypoint_count: N }
+   * Backend applies RDP simplification + Google Directions API road-snapping.
+   * Only call this when km >= 5 — client-side gate to reduce API calls.
+   */
+  getRoute: (attendanceId) => api.get(`/attendance/${attendanceId}/route`),
 };
 
 // ─── Notifications ────────────────────────────────────────────────────────────
@@ -286,6 +308,57 @@ export const trackingAPI = {
    * GET /tracking/live
    */
   getLive: () => api.get('/tracking/live'),
+};
+
+// ─── Feedback / Field Data Entry ─────────────────────────────────────────────
+export const feedbackAPI = {
+  /**
+   * Get dynamic form attributes for an activity type
+   * GET /feedback/activity-types/:id/attributes
+   */
+  getAttributes: (activityTypeId) =>
+    api.get(`/feedback/activity-types/${activityTypeId}/attributes`),
+
+  /**
+   * Submit a farmer feedback record with all field responses
+   * POST /feedback/submissions
+   * Body: { activity_type_id, farmer_name, farmer_phone?, village?, responses: [{field_key, value_text?, value_json?}] }
+   */
+  submit: (data) => api.post('/feedback/submissions', data),
+
+  /**
+   * List submissions for current user
+   * GET /feedback/submissions?activity_type_id=&skip=0&limit=50
+   */
+  listSubmissions: (params = {}) => api.get('/feedback/submissions', { params }),
+
+  /**
+   * Get single submission with all responses
+   * GET /feedback/submissions/:id
+   */
+  getSubmission: (id) => api.get(`/feedback/submissions/${id}`),
+
+  /**
+   * Upload a media file for a submission
+   * POST /feedback/media/upload (multipart)
+   */
+  uploadMedia: (feedbackId, fieldKey, fileUri, mimeType = 'image/jpeg') => {
+    const formData = new FormData();
+    formData.append('feedback_id', String(feedbackId));
+    formData.append('field_key', fieldKey);
+    formData.append('file', { uri: fileUri, name: 'photo.jpg', type: mimeType });
+    return api.post('/feedback/media/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  /**
+   * Download today's submitted feedback forms as a CSV string.
+   * GET /feedback/submissions/export/csv
+   * Returns the raw CSV text (responseType: 'text').
+   */
+  exportTodayCSV: () =>
+    api.get('/feedback/submissions/export/csv', { responseType: 'text' }),
 };
 
 export default api;

@@ -52,19 +52,10 @@ export default function TeamScreen() {
         usersAPI.fieldWorkload(),               // active task counts for FIELD users
       ]);
 
-      // Filter to only show users relevant to this manager
-      let allUsers = usersRes.data || [];
-      if (role === 'MANAGER') {
-        // Manager sees only their direct subordinates
-        allUsers = allUsers.filter(
-          (u) => u.manager_id === user?.id || String(u.manager_id) === String(user?.id)
-        );
-      } else {
-        // Owner sees everyone except other owners
-        allUsers = allUsers.filter((u) => u.role !== 'OWNER' || u.id === user?.id);
-      }
-
-      setMembers(allUsers);
+      // Backend scopes by role:
+      //   MANAGER → direct + indirect subordinates only
+      //   OWNER   → all non-OWNER users
+      setMembers(usersRes.data || []);
 
       // Build workload map
       const wmap = {};
@@ -78,7 +69,7 @@ export default function TeamScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [role, user?.id]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 

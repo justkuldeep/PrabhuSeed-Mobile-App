@@ -4,24 +4,32 @@
     "slug": "agritask",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/prabhuseed.jpg",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/prabhuseed.jpg",
       "resizeMode": "contain",
-      "backgroundColor": "#0f172a"
+      "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.pga.agritask"
+      "bundleIdentifier": "com.pga.agritask",
+      "config": {
+        "googleMapsApiKey": "AIzaSyBhjuSxK3y5CbO9iEkHOTmZ0u_JC0ApeNc"
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0f172a"
+        "foregroundImage": "./assets/prabhuseed.jpg",
+        "backgroundColor": "#ffffff"
       },
-      "package": "com.pga.agritask"
+      "package": "com.pga.agritask",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBhjuSxK3y5CbO9iEkHOTmZ0u_JC0ApeNc"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -43,6 +51,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "dfd4d586-872e-4698-bdfd-6884ef9ddf40"
+      }
+    },
+    "owner": "justkuldeep"
   }
 }

@@ -25,9 +25,10 @@ export const USER_ROLES = {
   accounts: 'Accounts',
 };
 
-// API base URL — set EXPO_PUBLIC_API_URL in .env, or replace the fallback with your machine's local IP
-export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL || 'https://agritask-backend-db-production.up.railway.app/api/v1';
+// API base URL — controlled entirely by EXPO_PUBLIC_API_URL in .env
+// Local dev:  http://192.168.x.x:8000/api/v1   (LAN IP of the machine running the backend)
+// Production: https://api.yourdomain.com/api/v1
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.prabhuseeds.com/api/v1';
 
 // Storage keys
 export const STORAGE_KEYS = {

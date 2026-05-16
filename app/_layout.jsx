@@ -42,6 +42,10 @@ export default function RootLayout() {
               name="tasks/create"
               options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
             />
+            <Stack.Screen
+              name="admin"
+              options={{ animation: 'slide_from_right' }}
+            />
           </Stack>
         </AuthProvider>
       </SafeAreaProvider>

@@ -3,11 +3,19 @@ import { useEffect } from 'react';
 import { Text, View, StyleSheet } from 'react-native';
 import { useAuth } from '../../services/authStore';
 import { Colors, Typography } from '../../constants/theme';
+import { useOfflineQueue } from '../../hooks/useFeedback';
 
-function TabIcon({ emoji, label, focused }) {
+function TabIcon({ emoji, label, focused, badge }) {
   return (
     <View style={styles.tabItem}>
-      <Text style={[styles.tabEmoji, focused && styles.tabEmojiActive]}>{emoji}</Text>
+      <View>
+        <Text style={[styles.tabEmoji, focused && styles.tabEmojiActive]}>{emoji}</Text>
+        {badge != null && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{badge > 9 ? '9+' : badge}</Text>
+          </View>
+        )}
+      </View>
       <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>{label}</Text>
     </View>
   );
@@ -16,8 +24,10 @@ function TabIcon({ emoji, label, focused }) {
 export default function TabsLayout() {
   const { isAuthenticated, loading, user } = useAuth();
   const router = useRouter();
+  const { queueCount } = useOfflineQueue();
 
   const isManager = user?.role === 'OWNER' || user?.role === 'MANAGER';
+  const isOwner = user?.role === 'OWNER';
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -54,6 +64,19 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="feedback"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon
+              emoji="📝"
+              label="Field"
+              focused={focused}
+              badge={queueCount > 0 ? queueCount : null}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="attendance"
         options={{
           tabBarIcon: ({ focused }) => (
@@ -81,6 +104,17 @@ export default function TabsLayout() {
           ),
           tabBarButton: isManager ? undefined : () => null,
           tabBarItemStyle: isManager ? undefined : { display: 'none', width: 0 },
+        }}
+      />
+      {/* Admin tab — only shown to OWNER */}
+      <Tabs.Screen
+        name="admin"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon emoji="⚙️" label="Admin" focused={focused} />
+          ),
+          tabBarButton: isOwner ? undefined : () => null,
+          tabBarItemStyle: isOwner ? undefined : { display: 'none', width: 0 },
         }}
       />
       <Tabs.Screen
@@ -132,5 +166,22 @@ const styles = StyleSheet.create({
   tabLabelActive: {
     color: Colors.tabActive,
     fontWeight: '600',
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -8,
+    backgroundColor: '#ef4444',
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
   },
 });

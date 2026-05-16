@@ -52,20 +52,18 @@ const MIN_KM_FOR_ROUTE = 5; // client-side gate — no API call below this
 
 function TeamAttendanceView() {
   const insets = useSafeAreaInsets();
-  const [records, setRecords]     = useState([]);
-  const [loading, setLoading]     = useState(true);
+  const [activeTab, setActiveTab]   = useState('today');
+  const [records, setRecords]       = useState([]);
+  const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
+  const [selectedDate, setSelectedDate] = useState(() => {
+    // Local date — NOT toISOString() which gives UTC and mismatches the IST server date.
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
 
-  // Route modal state
   const [routeModal, setRouteModal] = useState({
-    visible: false,
-    attendanceId: null,
-    agentName: '',
-    km: 0,
-    date: '',
+    visible: false, attendanceId: null, agentName: '', km: 0, date: '',
   });
 
   const load = useCallback(async () => {
@@ -101,37 +99,272 @@ function TeamAttendanceView() {
       {/* Header */}
       <View style={teamStyles.header}>
         <Text style={teamStyles.title}>Team Attendance</Text>
-        <Text style={teamStyles.date}>
-          {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', {
-            weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
-          })}
-        </Text>
+        {activeTab === 'today' && (
+          <Text style={teamStyles.date}>
+            {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', {
+              weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+            })}
+          </Text>
+        )}
       </View>
 
-      {/* Summary chips */}
-      <View style={teamStyles.summaryRow}>
-        <View style={[teamStyles.chip, { borderColor: Colors.primary }]}>
-          <Text style={[teamStyles.chipVal, { color: Colors.primary }]}>{checkedIn}</Text>
-          <Text style={teamStyles.chipLbl}>Checked In</Text>
-        </View>
-        <View style={[teamStyles.chip, { borderColor: Colors.info }]}>
-          <Text style={[teamStyles.chipVal, { color: Colors.info }]}>{checkedOut}</Text>
-          <Text style={teamStyles.chipLbl}>Checked Out</Text>
-        </View>
-        <View style={[teamStyles.chip, { borderColor: Colors.warning }]}>
-          <Text style={[teamStyles.chipVal, { color: Colors.warning }]}>{totalKm.toFixed(1)}</Text>
-          <Text style={teamStyles.chipLbl}>Total KM</Text>
-        </View>
+      {/* ── Tab switcher ── */}
+      <View style={teamStyles.tabSwitcher}>
+        <TouchableOpacity
+          style={[teamStyles.tabBtn, activeTab === 'today' && teamStyles.tabBtnActive]}
+          onPress={() => setActiveTab('today')}
+        >
+          <Text style={[teamStyles.tabBtnText, activeTab === 'today' && teamStyles.tabBtnTextActive]}>
+            📅 Today
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[teamStyles.tabBtn, activeTab === 'history' && teamStyles.tabBtnActive]}
+          onPress={() => setActiveTab('history')}
+        >
+          <Text style={[teamStyles.tabBtnText, activeTab === 'history' && teamStyles.tabBtnTextActive]}>
+            📊 History
+          </Text>
+        </TouchableOpacity>
       </View>
 
+      {/* ── TODAY TAB — unchanged ── */}
+      {activeTab === 'today' && (
+        <>
+          {/* Summary chips */}
+          <View style={teamStyles.summaryRow}>
+            <View style={[teamStyles.chip, { borderColor: Colors.primary }]}>
+              <Text style={[teamStyles.chipVal, { color: Colors.primary }]}>{checkedIn}</Text>
+              <Text style={teamStyles.chipLbl}>Checked In</Text>
+            </View>
+            <View style={[teamStyles.chip, { borderColor: Colors.info }]}>
+              <Text style={[teamStyles.chipVal, { color: Colors.info }]}>{checkedOut}</Text>
+              <Text style={teamStyles.chipLbl}>Checked Out</Text>
+            </View>
+            <View style={[teamStyles.chip, { borderColor: Colors.warning }]}>
+              <Text style={[teamStyles.chipVal, { color: Colors.warning }]}>{totalKm.toFixed(1)}</Text>
+              <Text style={teamStyles.chipLbl}>Total KM</Text>
+            </View>
+          </View>
+
+          {loading ? (
+            <View style={teamStyles.loadingCenter}>
+              <ActivityIndicator size="large" color={Colors.primary} />
+              <Text style={teamStyles.loadingText}>Loading…</Text>
+            </View>
+          ) : (
+            <ScrollView
+              contentContainerStyle={[teamStyles.list, { paddingBottom: insets.bottom + 80 }]}
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={() => { setRefreshing(true); load(); }}
+                  tintColor={Colors.primary}
+                  colors={[Colors.primary]}
+                />
+              }
+            >
+              {records.length === 0 ? (
+                <View style={teamStyles.empty}>
+                  <Text style={teamStyles.emptyIcon}>📋</Text>
+                  <Text style={teamStyles.emptyText}>No attendance records for this date</Text>
+                </View>
+              ) : (
+                records.map((rec) => {
+                  const km = parseFloat(rec.km) || 0;
+                  const hasRoute = km >= MIN_KM_FOR_ROUTE;
+                  const isActive = rec.check_in && !rec.check_out;
+                  const isDone   = rec.check_in && rec.check_out;
+
+                  return (
+                    <View key={rec.id} style={teamStyles.card}>
+                      <View style={teamStyles.cardTop}>
+                        <View style={teamStyles.avatar}>
+                          <Text style={teamStyles.avatarText}>
+                            {rec.name?.charAt(0)?.toUpperCase() || '?'}
+                          </Text>
+                        </View>
+                        <View style={teamStyles.agentInfo}>
+                          <Text style={teamStyles.agentName}>{rec.name}</Text>
+                          <Text style={teamStyles.agentDept}>{rec.department}</Text>
+                        </View>
+                        <View style={[
+                          teamStyles.statusPill,
+                          isActive ? teamStyles.pillActive : isDone ? teamStyles.pillDone : teamStyles.pillPending,
+                        ]}>
+                          <Text style={teamStyles.statusPillText}>
+                            {isActive ? 'Active' : isDone ? 'Done' : 'Not In'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={teamStyles.timeRow}>
+                        <TimeCell label="Check In"  value={rec.check_in  ? fmtTime(rec.check_in)  : '—'} />
+                        <TimeCell label="Check Out" value={rec.check_out ? fmtTime(rec.check_out) : '—'} />
+                        <TimeCell label="Distance"  value={km > 0 ? `${km.toFixed(1)} km` : '—'} accent={km >= MIN_KM_FOR_ROUTE} />
+                      </View>
+
+                      {isDone && (
+                        <TouchableOpacity
+                          style={[teamStyles.routeBtn, !hasRoute && teamStyles.routeBtnDisabled]}
+                          onPress={() => hasRoute ? openRoute(rec) : null}
+                          activeOpacity={hasRoute ? 0.7 : 1}
+                        >
+                          <Text style={[teamStyles.routeBtnText, !hasRoute && teamStyles.routeBtnTextDisabled]}>
+                            {hasRoute ? '🗺️ Show Route' : `🚫 Route Unavailable (< ${MIN_KM_FOR_ROUTE} km)`}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
+          )}
+
+          {/* Route modal for Today tab */}
+          <RouteMapModal
+            visible={routeModal.visible}
+            onClose={() => setRouteModal((p) => ({ ...p, visible: false }))}
+            attendanceId={routeModal.attendanceId}
+            agentName={routeModal.agentName}
+            km={routeModal.km}
+            date={routeModal.date}
+          />
+        </>
+      )}
+
+      {/* ── HISTORY TAB ── */}
+      {activeTab === 'history' && <AttendanceHistoryView insets={insets} />}
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HISTORY VIEW — full monthly attendance history with calendar filter + routes
+// ─────────────────────────────────────────────────────────────────────────────
+function AttendanceHistoryView({ insets }) {
+  const [records, setRecords]       = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [month, setMonth] = useState(() => {
+    const d = new Date();
+    return { year: d.getFullYear(), month: d.getMonth() + 1 };
+  });
+  const [routeModal, setRouteModal] = useState({
+    visible: false, attendanceId: null, agentName: '', km: 0, date: '',
+  });
+
+  const monthStr   = `${month.year}-${String(month.month).padStart(2, '0')}`;
+  const monthLabel = new Date(month.year, month.month - 1, 1)
+    .toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
+  const now = new Date();
+  const isCurrentMonth = month.year === now.getFullYear() && month.month === now.getMonth() + 1;
+
+  function prevMonth() {
+    setMonth(({ year, month: m }) =>
+      m === 1 ? { year: year - 1, month: 12 } : { year, month: m - 1 }
+    );
+  }
+  function nextMonth() {
+    if (isCurrentMonth) return;
+    setMonth(({ year, month: m }) =>
+      m === 12 ? { year: year + 1, month: 1 } : { year, month: m + 1 }
+    );
+  }
+
+  const load = useCallback(async () => {
+    try {
+      const res = await attendanceAPI.teamMonthly({ month: monthStr });
+      setRecords(res.data || []);
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to load history');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [monthStr]);
+
+  useEffect(() => {
+    setLoading(true);
+    load();
+  }, [load]);
+
+  function openRoute(record) {
+    setRouteModal({
+      visible: true,
+      attendanceId: record.id,
+      agentName: record.name,
+      km: parseFloat(record.km) || 0,
+      date: record.date,
+    });
+  }
+
+  // Summary
+  const presentCount  = records.filter((r) => r.check_in).length;
+  const totalKm       = records.reduce((s, r) => s + (parseFloat(r.km) || 0), 0);
+  const uniqueAgents  = new Set(records.map((r) => String(r.user_id))).size;
+
+  // Group by date descending
+  const grouped = records.reduce((acc, rec) => {
+    const key = String(rec.date);
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(rec);
+    return acc;
+  }, {});
+  const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/* ── Month navigator ── */}
+      <View style={historyStyles.monthNav}>
+        <TouchableOpacity style={historyStyles.navBtn} onPress={prevMonth}>
+          <Text style={historyStyles.navArrow}>‹</Text>
+        </TouchableOpacity>
+        <Text style={historyStyles.monthLabel}>{monthLabel}</Text>
+        <TouchableOpacity
+          style={[historyStyles.navBtn, isCurrentMonth && { opacity: 0.3 }]}
+          onPress={nextMonth}
+          disabled={isCurrentMonth}
+        >
+          <Text style={historyStyles.navArrow}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Summary chips ── */}
+      {!loading && records.length > 0 && (
+        <View style={historyStyles.summaryRow}>
+          <View style={historyStyles.summaryChip}>
+            <Text style={[historyStyles.summaryVal, { color: Colors.primary }]}>{presentCount}</Text>
+            <Text style={historyStyles.summaryLbl}>Present</Text>
+          </View>
+          <View style={historyStyles.summaryChip}>
+            <Text style={[historyStyles.summaryVal, { color: Colors.info }]}>{uniqueAgents}</Text>
+            <Text style={historyStyles.summaryLbl}>Agents</Text>
+          </View>
+          <View style={historyStyles.summaryChip}>
+            <Text style={[historyStyles.summaryVal, { color: Colors.warning }]}>{totalKm.toFixed(1)}</Text>
+            <Text style={historyStyles.summaryLbl}>Total KM</Text>
+          </View>
+        </View>
+      )}
+
+      {/* ── Content ── */}
       {loading ? (
         <View style={teamStyles.loadingCenter}>
           <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={teamStyles.loadingText}>Loading…</Text>
+          <Text style={teamStyles.loadingText}>Loading history…</Text>
+        </View>
+      ) : sortedDates.length === 0 ? (
+        <View style={teamStyles.empty}>
+          <Text style={teamStyles.emptyIcon}>📭</Text>
+          <Text style={teamStyles.emptyText}>No attendance records for {monthLabel}</Text>
         </View>
       ) : (
         <ScrollView
-          contentContainerStyle={[teamStyles.list, { paddingBottom: insets.bottom + 80 }]}
+          contentContainerStyle={[historyStyles.list, { paddingBottom: (insets?.bottom || 0) + 80 }]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -142,68 +375,81 @@ function TeamAttendanceView() {
             />
           }
         >
-          {records.length === 0 ? (
-            <View style={teamStyles.empty}>
-              <Text style={teamStyles.emptyIcon}>📋</Text>
-              <Text style={teamStyles.emptyText}>No attendance records for this date</Text>
-            </View>
-          ) : (
-            records.map((rec) => {
-              const km = parseFloat(rec.km) || 0;
-              const hasRoute = km >= MIN_KM_FOR_ROUTE;
-              const isActive = rec.check_in && !rec.check_out;
-              const isDone   = rec.check_in && rec.check_out;
+          {sortedDates.map((dateStr) => {
+            const dayRecords = grouped[dateStr];
+            const dateLabel  = new Date(dateStr + 'T00:00:00').toLocaleDateString('en-IN', {
+              weekday: 'short', day: 'numeric', month: 'short',
+            });
 
-              return (
-                <View key={rec.id} style={teamStyles.card}>
-                  {/* Agent info */}
-                  <View style={teamStyles.cardTop}>
-                    <View style={teamStyles.avatar}>
-                      <Text style={teamStyles.avatarText}>
-                        {rec.name?.charAt(0)?.toUpperCase() || '?'}
-                      </Text>
-                    </View>
-                    <View style={teamStyles.agentInfo}>
-                      <Text style={teamStyles.agentName}>{rec.name}</Text>
-                      <Text style={teamStyles.agentDept}>{rec.department}</Text>
-                    </View>
-                    <View style={[
-                      teamStyles.statusPill,
-                      isActive ? teamStyles.pillActive : isDone ? teamStyles.pillDone : teamStyles.pillPending,
-                    ]}>
-                      <Text style={teamStyles.statusPillText}>
-                        {isActive ? 'Active' : isDone ? 'Done' : 'Not In'}
-                      </Text>
-                    </View>
+            return (
+              <View key={dateStr} style={historyStyles.dateGroup}>
+                {/* Date section header */}
+                <View style={historyStyles.dateHeader}>
+                  <View style={historyStyles.datePill}>
+                    <Text style={historyStyles.datePillText}>{dateLabel}</Text>
                   </View>
-
-                  {/* Times + KM */}
-                  <View style={teamStyles.timeRow}>
-                    <TimeCell label="Check In"  value={rec.check_in  ? fmtTime(rec.check_in)  : '—'} />
-                    <TimeCell label="Check Out" value={rec.check_out ? fmtTime(rec.check_out) : '—'} />
-                    <TimeCell label="Distance"  value={km > 0 ? `${km.toFixed(1)} km` : '—'} accent={km >= MIN_KM_FOR_ROUTE} />
-                  </View>
-
-                  {/* Show Route button */}
-                  {isDone && (
-                    <TouchableOpacity
-                      style={[teamStyles.routeBtn, !hasRoute && teamStyles.routeBtnDisabled]}
-                      onPress={() => hasRoute ? openRoute(rec) : null}
-                      activeOpacity={hasRoute ? 0.7 : 1}
-                    >
-                      <Text style={[teamStyles.routeBtnText, !hasRoute && teamStyles.routeBtnTextDisabled]}>
-                        {hasRoute ? '🗺️ Show Route' : `🚫 Route Unavailable (< ${MIN_KM_FOR_ROUTE} km)`}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
+                  <View style={historyStyles.dateLine} />
+                  <Text style={historyStyles.dateCount}>{dayRecords.length} agent{dayRecords.length !== 1 ? 's' : ''}</Text>
                 </View>
-              );
-            })
-          )}
+
+                {/* Agent cards for this date */}
+                {dayRecords.map((rec) => {
+                  const km       = parseFloat(rec.km) || 0;
+                  const hasRoute = km >= MIN_KM_FOR_ROUTE;
+                  const isActive = rec.check_in && !rec.check_out;
+                  const isDone   = rec.check_in && rec.check_out;
+
+                  return (
+                    <View key={rec.id} style={historyStyles.card}>
+                      {/* Agent info row */}
+                      <View style={teamStyles.cardTop}>
+                        <View style={teamStyles.avatar}>
+                          <Text style={teamStyles.avatarText}>
+                            {rec.name?.charAt(0)?.toUpperCase() || '?'}
+                          </Text>
+                        </View>
+                        <View style={teamStyles.agentInfo}>
+                          <Text style={teamStyles.agentName}>{rec.name}</Text>
+                          <Text style={teamStyles.agentDept}>{rec.department}</Text>
+                        </View>
+                        <View style={[
+                          teamStyles.statusPill,
+                          isActive ? teamStyles.pillActive : isDone ? teamStyles.pillDone : teamStyles.pillPending,
+                        ]}>
+                          <Text style={teamStyles.statusPillText}>
+                            {isActive ? 'Active' : isDone ? 'Done' : 'Not In'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Times + distance */}
+                      <View style={teamStyles.timeRow}>
+                        <TimeCell label="Check In"  value={rec.check_in  ? fmtTime(rec.check_in)  : '—'} />
+                        <TimeCell label="Check Out" value={rec.check_out ? fmtTime(rec.check_out) : '—'} />
+                        <TimeCell label="Distance"  value={km > 0 ? `${km.toFixed(1)} km` : '—'} accent={km >= MIN_KM_FOR_ROUTE} />
+                      </View>
+
+                      {/* Route button (done records only) */}
+                      {isDone && (
+                        <TouchableOpacity
+                          style={[teamStyles.routeBtn, !hasRoute && teamStyles.routeBtnDisabled]}
+                          onPress={() => hasRoute ? openRoute(rec) : null}
+                          activeOpacity={hasRoute ? 0.7 : 1}
+                        >
+                          <Text style={[teamStyles.routeBtnText, !hasRoute && teamStyles.routeBtnTextDisabled]}>
+                            {hasRoute ? '🗺️ Show Route' : `🚫 Route Unavailable (< ${MIN_KM_FOR_ROUTE} km)`}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            );
+          })}
         </ScrollView>
       )}
 
-      {/* Route map modal */}
       <RouteMapModal
         visible={routeModal.visible}
         onClose={() => setRouteModal((p) => ({ ...p, visible: false }))}
@@ -302,6 +548,7 @@ function FieldAttendanceView() {
       }
       const res = await attendanceAPI.checkIn({ lat: coords.lat, lng: coords.lng, address: coords.address });
       setToday(res.data);
+      await load(); // refresh report so monthly summary reflects today's check-in
       Alert.alert('Checked In ✅', coords.address || `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`);
     } catch (err) {
       Alert.alert('Error', err.message);
@@ -657,6 +904,13 @@ const teamStyles = StyleSheet.create({
   header: { paddingHorizontal: Spacing.base, paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border },
   title: { fontSize: Typography.xl, fontWeight: Typography.bold, color: Colors.textPrimary },
   date: { fontSize: Typography.xs, color: Colors.textMuted, marginTop: 2 },
+  // Tab switcher
+  tabSwitcher: { flexDirection: 'row', gap: Spacing.sm, padding: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.border, backgroundColor: Colors.surface },
+  tabBtn: { flex: 1, paddingVertical: Spacing.sm, alignItems: 'center', borderRadius: Radius.md, backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border },
+  tabBtnActive: { backgroundColor: Colors.primaryMuted, borderColor: Colors.primary },
+  tabBtnText: { fontSize: Typography.sm, fontWeight: '600', color: Colors.textSecondary },
+  tabBtnTextActive: { color: Colors.primary },
+  // Summary chips (Today tab)
   summaryRow: { flexDirection: 'row', gap: Spacing.md, padding: Spacing.base, borderBottomWidth: 1, borderBottomColor: Colors.border },
   chip: { flex: 1, alignItems: 'center', backgroundColor: Colors.surface, borderRadius: Radius.md, padding: Spacing.md, borderWidth: 1.5 },
   chipVal: { fontSize: Typography.xl, fontWeight: Typography.bold },
@@ -667,7 +921,7 @@ const teamStyles = StyleSheet.create({
   empty: { alignItems: 'center', paddingVertical: 60 },
   emptyIcon: { fontSize: 40, opacity: 0.4, marginBottom: Spacing.md },
   emptyText: { fontSize: Typography.sm, color: Colors.textMuted },
-  // Agent card
+  // Agent card (shared between Today and History)
   card: { backgroundColor: Colors.surface, borderRadius: Radius.lg, padding: Spacing.base, borderWidth: 1, borderColor: Colors.border },
   cardTop: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.md },
   avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primaryMuted, alignItems: 'center', justifyContent: 'center', marginRight: Spacing.md },
@@ -680,14 +934,37 @@ const teamStyles = StyleSheet.create({
   pillDone:    { backgroundColor: 'rgba(59,130,246,0.15)' },
   pillPending: { backgroundColor: 'rgba(148,163,184,0.12)' },
   statusPillText: { fontSize: 11, fontWeight: '700', color: Colors.textSecondary },
-  // Time row
   timeRow: { flexDirection: 'row', marginBottom: Spacing.md, backgroundColor: Colors.background, borderRadius: Radius.md, padding: Spacing.md },
   timeCell: { flex: 1, alignItems: 'center' },
   timeCellLabel: { fontSize: 10, color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 },
   timeCellValue: { fontSize: Typography.sm, fontWeight: Typography.semibold, color: Colors.textPrimary },
-  // Route button
   routeBtn: { backgroundColor: Colors.primaryMuted, borderRadius: Radius.md, paddingVertical: Spacing.md, alignItems: 'center', borderWidth: 1, borderColor: Colors.primary },
   routeBtnDisabled: { backgroundColor: Colors.surface, borderColor: Colors.border },
   routeBtnText: { fontSize: Typography.sm, fontWeight: '700', color: Colors.primary },
   routeBtnTextDisabled: { color: Colors.textMuted, fontWeight: '500' },
+});
+
+// ── History view styles ───────────────────────────────────────────────────────
+const historyStyles = StyleSheet.create({
+  // Month navigator
+  monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.base, paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border, backgroundColor: Colors.surface },
+  navBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: Radius.full, backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border },
+  navArrow: { fontSize: 22, color: Colors.textPrimary, fontWeight: '600', lineHeight: 26 },
+  monthLabel: { fontSize: Typography.base, fontWeight: Typography.bold, color: Colors.textPrimary },
+  // Summary chips
+  summaryRow: { flexDirection: 'row', gap: Spacing.md, paddingHorizontal: Spacing.base, paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  summaryChip: { flex: 1, alignItems: 'center', backgroundColor: Colors.surface, borderRadius: Radius.md, paddingVertical: Spacing.sm, borderWidth: 1, borderColor: Colors.border },
+  summaryVal: { fontSize: Typography.xl, fontWeight: Typography.bold },
+  summaryLbl: { fontSize: 10, color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
+  // List
+  list: { padding: Spacing.base, gap: Spacing.lg },
+  // Date group
+  dateGroup: { gap: Spacing.sm },
+  dateHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: 4 },
+  datePill: { paddingHorizontal: Spacing.md, paddingVertical: 4, backgroundColor: Colors.primaryMuted, borderRadius: Radius.full },
+  datePillText: { fontSize: Typography.xs, fontWeight: '700', color: Colors.primary },
+  dateLine: { flex: 1, height: 1, backgroundColor: Colors.border },
+  dateCount: { fontSize: 10, color: Colors.textMuted },
+  // Agent card (history has same base card, just inside a date group)
+  card: { backgroundColor: Colors.surface, borderRadius: Radius.lg, padding: Spacing.base, borderWidth: 1, borderColor: Colors.border },
 });

@@ -28,55 +28,57 @@ export default function RouteMapModal({ visible, onClose, attendanceId, agentNam
   const insets = useSafeAreaInsets();
   const mapRef = useRef(null);
 
-  const [waypoints, setWaypoints] = useState([]);
+  const [routeCoords, setRouteCoords] = useState([]);  // road-snapped polyline
+  const [waypointCount, setWaypointCount] = useState(0);
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState(null);
 
   const kmNum = parseFloat(km) || 0;
   const hasEnoughDistance = kmNum >= MIN_KM_FOR_ROUTE;
 
-  // ── Fetch waypoints when modal opens ──────────────────────────────────────
+  // ── Fetch road-snapped route when modal opens ─────────────────────────────
   useEffect(() => {
     if (!visible || !attendanceId) return;
-
-    // Client-side gate — skip API call if distance < 5 km
     if (!hasEnoughDistance) return;
 
     setLoading(true);
     setError(null);
-    setWaypoints([]);
+    setRouteCoords([]);
+    setWaypointCount(0);
 
-    attendanceAPI.getWaypoints(attendanceId)
+    attendanceAPI.getRoute(attendanceId)
       .then((res) => {
-        const pts = (res.data || [])
-          .filter((w) => parseFloat(w.lat) !== 0 && parseFloat(w.lng) !== 0)
-          .map((w) => ({ lat: parseFloat(w.lat), lng: parseFloat(w.lng), type: w.type }));
-        setWaypoints(pts);
+        const data = res.data || {};
+        const pts = (data.polyline || []).map((p) => ({
+          latitude: parseFloat(p.lat),
+          longitude: parseFloat(p.lng),
+        }));
+        setRouteCoords(pts);
+        setWaypointCount(data.waypoint_count || pts.length);
       })
       .catch((err) => setError(err.message || 'Failed to load route'))
       .finally(() => setLoading(false));
   }, [visible, attendanceId, hasEnoughDistance]);
 
-  // ── Fit map to waypoints once loaded ──────────────────────────────────────
+  // ── Fit map to route once loaded ──────────────────────────────────────────
   useEffect(() => {
-    if (waypoints.length > 1 && mapRef.current) {
+    if (routeCoords.length > 1 && mapRef.current) {
       mapRef.current.fitToCoordinates(
-        waypoints.map((w) => ({ latitude: w.lat, longitude: w.lng })),
+        routeCoords,
         { edgePadding: { top: 60, right: 40, bottom: 60, left: 40 }, animated: true },
       );
     }
-  }, [waypoints]);
+  }, [routeCoords]);
 
   // ── Reset on close ────────────────────────────────────────────────────────
   function handleClose() {
-    setWaypoints([]);
+    setRouteCoords([]);
     setError(null);
     onClose();
   }
 
-  const coords = waypoints.map((w) => ({ latitude: w.lat, longitude: w.lng }));
-  const startPt = waypoints[0];
-  const endPt   = waypoints[waypoints.length - 1];
+  const startPt = routeCoords[0];
+  const endPt   = routeCoords[routeCoords.length - 1];
 
   const formattedDate = date
     ? new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -138,7 +140,7 @@ export default function RouteMapModal({ visible, onClose, attendanceId, agentNam
             <Text style={styles.unavailableDesc}>{error}</Text>
           </View>
 
-        ) : waypoints.length < 2 ? (
+        ) : routeCoords.length < 2 ? (
           <View style={styles.unavailable}>
             <Text style={styles.unavailableIcon}>📍</Text>
             <Text style={styles.unavailableTitle}>Insufficient GPS Data</Text>
@@ -160,30 +162,18 @@ export default function RouteMapModal({ visible, onClose, attendanceId, agentNam
               showsCompass
               toolbarEnabled={false}
             >
-              {/* Route polyline */}
+              {/* Road-snapped route polyline */}
               <Polyline
-                coordinates={coords}
+                coordinates={routeCoords}
                 strokeColor={Colors.primary}
                 strokeWidth={4}
-                lineDashPattern={undefined}
+                geodesic
               />
-
-              {/* Intermediate waypoints — small dots */}
-              {waypoints.slice(1, -1).map((w, idx) => (
-                <Marker
-                  key={`wp-${idx}`}
-                  coordinate={{ latitude: w.lat, longitude: w.lng }}
-                  anchor={{ x: 0.5, y: 0.5 }}
-                  tracksViewChanges={false}
-                >
-                  <View style={styles.dotMarker} />
-                </Marker>
-              ))}
 
               {/* Start marker — green */}
               {startPt && (
                 <Marker
-                  coordinate={{ latitude: startPt.lat, longitude: startPt.lng }}
+                  coordinate={startPt}
                   title="Start"
                   anchor={{ x: 0.5, y: 0.5 }}
                 >
@@ -196,7 +186,7 @@ export default function RouteMapModal({ visible, onClose, attendanceId, agentNam
               {/* End marker — red */}
               {endPt && endPt !== startPt && (
                 <Marker
-                  coordinate={{ latitude: endPt.lat, longitude: endPt.lng }}
+                  coordinate={endPt}
                   title="End"
                   anchor={{ x: 0.5, y: 0.5 }}
                 >
@@ -210,15 +200,15 @@ export default function RouteMapModal({ visible, onClose, attendanceId, agentNam
             {/* Stats bar */}
             <View style={[styles.statsBar, { paddingBottom: insets.bottom + Spacing.md }]}>
               <StatChip label="Distance" value={`${kmNum.toFixed(1)} km`} color={Colors.primary} />
-              <StatChip label="Waypoints" value={String(waypoints.length)} color={Colors.info} />
+              <StatChip label="Waypoints" value={String(waypointCount)} color={Colors.info} />
               <StatChip
                 label="Start"
-                value={startPt ? `${startPt.lat.toFixed(3)}, ${startPt.lng.toFixed(3)}` : '—'}
+                value={startPt ? `${startPt.latitude.toFixed(3)}, ${startPt.longitude.toFixed(3)}` : '—'}
                 color={Colors.primary}
               />
               <StatChip
                 label="End"
-                value={endPt ? `${endPt.lat.toFixed(3)}, ${endPt.lng.toFixed(3)}` : '—'}
+                value={endPt ? `${endPt.latitude.toFixed(3)}, ${endPt.longitude.toFixed(3)}` : '—'}
                 color={Colors.error}
               />
             </View>
