@@ -46,7 +46,7 @@ export default function HomeScreen() {
     return 'Good evening';
   };
 
-  const isManager = user?.role === 'OWNER' || user?.role === 'MANAGER';
+  const isManager = user?.role === 'SUPER_ADMIN' || user?.role === 'OWNER' || user?.role === 'MANAGER';
 
   return (
     <ScrollView

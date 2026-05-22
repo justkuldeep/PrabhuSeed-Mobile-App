@@ -22,13 +22,14 @@ import { useAuth } from '../../services/authStore';
 import { Colors, Spacing, Typography, Radius } from '../../constants/theme';
 
 const ROLE_META = {
-  OWNER:    { label: 'Owner',        color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)',  emoji: '👑' },
-  MANAGER:  { label: 'Manager',      color: Colors.info,      bg: 'rgba(59,130,246,0.12)',  emoji: '👔' },
-  FIELD:    { label: 'Field Agent',  color: Colors.primary,   bg: 'rgba(34,197,94,0.12)',   emoji: '🌾' },
-  ACCOUNTS: { label: 'Accounts',     color: Colors.warning,   bg: 'rgba(245,158,11,0.12)',  emoji: '💼' },
+  SUPER_ADMIN: { label: 'Super Admin',  color: '#ef4444', bg: 'rgba(239,68,68,0.12)',    emoji: '🛡️' },
+  OWNER:       { label: 'Owner',        color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)',   emoji: '👑' },
+  MANAGER:     { label: 'Manager',      color: Colors.info,      bg: 'rgba(59,130,246,0.12)',  emoji: '👔' },
+  FIELD:       { label: 'Field Agent',  color: Colors.primary,   bg: 'rgba(34,197,94,0.12)',   emoji: '🌾' },
+  ACCOUNTS:    { label: 'Accounts',     color: Colors.warning,   bg: 'rgba(245,158,11,0.12)',  emoji: '💼' },
 };
 
-const ROLE_FILTERS = ['ALL', 'OWNER', 'MANAGER', 'FIELD', 'ACCOUNTS'];
+const ROLE_FILTERS = ['ALL', 'SUPER_ADMIN', 'OWNER', 'MANAGER', 'FIELD', 'ACCOUNTS'];
 
 export default function AdminScreen() {
   const insets = useSafeAreaInsets();

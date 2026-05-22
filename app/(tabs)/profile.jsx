@@ -92,14 +92,16 @@ export default function ProfileScreen() {
             {USER_ROLES[user?.role] || user?.role}
           </Text>
         </View>
-        <Text style={styles.mobile}>📱 +91 {user?.mobile}</Text>
+        {user?.mobile ? (
+          <Text style={styles.mobile}>📱 +91 {user.mobile}</Text>
+        ) : null}
       </View>
 
       {/* Info card */}
       <Card style={styles.infoCard}>
         <Text style={styles.cardTitle}>Account Info</Text>
         <InfoRow label="Name" value={user?.name} />
-        <InfoRow label="Mobile" value={`+91 ${user?.mobile}`} />
+        {user?.mobile ? <InfoRow label="Mobile" value={`+91 ${user.mobile}`} /> : null}
         <InfoRow label="Role" value={USER_ROLES[user?.role] || user?.role} />
         <InfoRow label="User ID" value={user?.id?.slice(0, 8) + '...'} />
       </Card>

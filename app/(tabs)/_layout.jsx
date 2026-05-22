@@ -28,7 +28,6 @@ export default function TabsLayout() {
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
   const isManager = user?.role === 'SUPER_ADMIN' || user?.role === 'OWNER' || user?.role === 'MANAGER';
-  const isOwner = user?.role === 'OWNER';
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
