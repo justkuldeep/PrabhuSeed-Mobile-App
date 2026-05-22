@@ -15,10 +15,12 @@ export const TASK_STATUS = {
 
 // User roles — handles both uppercase (normalized) and lowercase (legacy)
 export const USER_ROLES = {
+  SUPER_ADMIN: 'Super Admin',
   OWNER: 'Owner',
   MANAGER: 'Manager',
   FIELD: 'Field Agent',
   ACCOUNTS: 'Accounts',
+  super_admin: 'Super Admin',
   owner: 'Owner',
   manager: 'Manager',
   field: 'Field Agent',

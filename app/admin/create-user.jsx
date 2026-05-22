@@ -1,6 +1,6 @@
 /**
- * Create User Screen — OWNER only
- * Full form with validation; submits to POST /users via usersAPI.create()
+ * Create User Screen — SUPER_ADMIN only
+ * Creates users with employee_id, gmail, and password stored in Supabase DB.
  */
 import React, { useState, useEffect } from 'react';
 import {
@@ -26,6 +26,7 @@ import { Colors, Spacing, Typography, Radius } from '../../constants/theme';
 // ─── Static options ────────────────────────────────────────────────────────────
 
 const ROLE_OPTIONS = [
+  { value: 'OWNER',    label: '👑 Owner' },
   { value: 'MANAGER',  label: '👔 Manager' },
   { value: 'FIELD',    label: '🌾 Field Agent' },
   { value: 'ACCOUNTS', label: '💼 Accounts' },
@@ -54,9 +55,7 @@ function PickerModal({ visible, title, options, selected, onSelect, onClose }) {
           contentContainerStyle={{ paddingBottom: 24 }}
         >
           {options.map((opt) => {
-            const isSelected = opt.value
-              ? opt.value === selected
-              : opt === selected;
+            const isSelected = opt.value ? opt.value === selected : opt === selected;
             const label = opt.label || opt;
             const value = opt.value || opt;
             return (
@@ -80,10 +79,7 @@ function PickerModal({ visible, title, options, selected, onSelect, onClose }) {
 }
 
 const pickerStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: Colors.overlay,
-  },
+  overlay: { flex: 1, backgroundColor: Colors.overlay },
   sheet: {
     position: 'absolute',
     bottom: 0,
@@ -124,7 +120,7 @@ const pickerStyles = StyleSheet.create({
   check: { fontSize: 16, color: Colors.primary, fontWeight: '700' },
 });
 
-// ─── Select field (non-editable input that opens a picker) ────────────────────
+// ─── Select field ─────────────────────────────────────────────────────────────
 
 function SelectField({ label, placeholder, value, displayValue, onPress, error }) {
   return (
@@ -195,23 +191,23 @@ export default function CreateUserScreen() {
   const router = useRouter();
   const { user } = useAuth();
 
-  // Guard: OWNER only
+  // Guard: SUPER_ADMIN only
   useEffect(() => {
-    if (user?.role?.toUpperCase() !== 'OWNER') {
-      Alert.alert('Access Denied', 'Only Owners can create users.');
+    if (user?.role?.toUpperCase() !== 'SUPER_ADMIN') {
+      Alert.alert('Access Denied', 'Only Super Admins can create users.');
       router.back();
     }
   }, [user]);
 
-  // ── Form state ──────────────────────────────────────────────────────────────
   const [form, setForm] = useState({
+    employee_id: '',
     name: '',
     surname: '',
     mobile: '',
+    email: '',
     password: '',
     confirmPassword: '',
     role: '',
-    email: '',
     state: '',
     hq: '',
     manager_id: '',
@@ -220,12 +216,10 @@ export default function CreateUserScreen() {
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
 
-  // ── Picker state ────────────────────────────────────────────────────────────
-  const [picker, setPicker] = useState(null); // 'role' | 'state' | 'manager'
+  const [picker, setPicker] = useState(null);
   const [managers, setManagers] = useState([]);
   const [loadingManagers, setLoadingManagers] = useState(false);
 
-  // Load managers when role changes to FIELD or ACCOUNTS
   useEffect(() => {
     if (form.role === 'FIELD' || form.role === 'ACCOUNTS') {
       setLoadingManagers(true);
@@ -239,20 +233,19 @@ export default function CreateUserScreen() {
     }
   }, [form.role]);
 
-  // ── Field updater ──────────────────────────────────────────────────────────
   const set = (key) => (val) => {
     setForm((prev) => ({ ...prev, [key]: val }));
     if (errors[key]) setErrors((prev) => ({ ...prev, [key]: '' }));
   };
 
-  // ── Validation ─────────────────────────────────────────────────────────────
   function validate() {
     const e = {};
+    if (!form.employee_id.trim()) e.employee_id = 'Employee ID is required';
     if (!form.name.trim()) e.name = 'Name is required';
-    if (!form.mobile.trim()) {
-      e.mobile = 'Mobile is required';
-    } else if (!/^\d{10}$/.test(form.mobile.trim())) {
-      e.mobile = 'Enter a valid 10-digit mobile number';
+    if (!form.email.trim()) {
+      e.email = 'Email (Gmail) is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      e.email = 'Enter a valid email address';
     }
     if (!form.password) {
       e.password = 'Password is required';
@@ -263,8 +256,11 @@ export default function CreateUserScreen() {
       e.confirmPassword = 'Passwords do not match';
     }
     if (!form.role) e.role = 'Role is required';
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      e.email = 'Enter a valid email address';
+    if (form.role === 'FIELD' && !form.manager_id) {
+      e.manager_id = 'A manager must be assigned to field agents';
+    }
+    if (form.mobile && !/^\d{10}$/.test(form.mobile.trim())) {
+      e.mobile = 'Enter a valid 10-digit mobile number';
     }
     if (form.ppk_rate && isNaN(Number(form.ppk_rate))) {
       e.ppk_rate = 'PPK Rate must be a number';
@@ -273,20 +269,20 @@ export default function CreateUserScreen() {
     return Object.keys(e).length === 0;
   }
 
-  // ── Submit ─────────────────────────────────────────────────────────────────
   async function handleSubmit() {
     if (!validate()) return;
 
     setSubmitting(true);
     try {
       const payload = {
+        employee_id: form.employee_id.trim(),
         name: form.name.trim(),
-        mobile: form.mobile.trim(),
+        email: form.email.trim(),
         password: form.password,
         role: form.role,
       };
       if (form.surname.trim())    payload.surname    = form.surname.trim();
-      if (form.email.trim())      payload.email      = form.email.trim();
+      if (form.mobile.trim())     payload.mobile     = form.mobile.trim();
       if (form.state)             payload.state      = form.state;
       if (form.hq.trim())         payload.hq         = form.hq.trim();
       if (form.manager_id)        payload.manager_id = form.manager_id;
@@ -296,7 +292,7 @@ export default function CreateUserScreen() {
 
       Alert.alert(
         'User Created',
-        `${payload.name} has been added as a ${form.role.charAt(0) + form.role.slice(1).toLowerCase()}.`,
+        `${payload.name} has been added as ${form.role.charAt(0) + form.role.slice(1).toLowerCase()}.`,
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } catch (err) {
@@ -306,15 +302,13 @@ export default function CreateUserScreen() {
     }
   }
 
-  // ── Manager picker options ─────────────────────────────────────────────────
   const managerOptions = managers.map((m) => ({
     value: m.id,
-    label: `${m.name}${m.surname ? ' ' + m.surname : ''} · ${m.hq || m.state || m.mobile}`,
+    label: `${m.name}${m.surname ? ' ' + m.surname : ''} · ${m.hq || m.state || m.mobile || ''}`,
   }));
   const selectedManagerLabel = managers.find((m) => m.id === form.manager_id)
-    ? `${managers.find((m) => m.id === form.manager_id)?.name}`
+    ? managers.find((m) => m.id === form.manager_id)?.name
     : '';
-
   const selectedRoleLabel = ROLE_OPTIONS.find((r) => r.value === form.role)?.label || '';
 
   return (
@@ -322,7 +316,6 @@ export default function CreateUserScreen() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      {/* ── Navigation header ── */}
       <View style={[styles.navBar, { paddingTop: insets.top + Spacing.sm }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
           <Text style={styles.backIcon}>‹</Text>
@@ -337,8 +330,19 @@ export default function CreateUserScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Required info ── */}
-        <Section title="Required Info" />
+        {/* ── Identity ── */}
+        <Section title="Identity" />
+
+        <Input
+          label="Employee ID *"
+          placeholder="e.g. 9 or EMP009"
+          value={form.employee_id}
+          onChangeText={set('employee_id')}
+          autoCapitalize="none"
+          autoCorrect={false}
+          error={errors.employee_id}
+          hint="Unique identifier used for login"
+        />
 
         <Input
           label="Full Name *"
@@ -351,15 +355,19 @@ export default function CreateUserScreen() {
         />
 
         <Input
-          label="Mobile Number *"
-          placeholder="10-digit mobile"
-          value={form.mobile}
-          onChangeText={set('mobile')}
-          keyboardType="phone-pad"
-          maxLength={10}
-          error={errors.mobile}
-          hint="Used for login via OTP"
+          label="Gmail / Email *"
+          placeholder="e.g. ramesh@gmail.com"
+          value={form.email}
+          onChangeText={set('email')}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+          error={errors.email}
+          hint="Used for login and notifications"
         />
+
+        {/* ── Credentials ── */}
+        <Section title="Credentials" />
 
         <Input
           label="Password *"
@@ -378,6 +386,9 @@ export default function CreateUserScreen() {
           secureTextEntry
           error={errors.confirmPassword}
         />
+
+        {/* ── Role ── */}
+        <Section title="Role & Access" />
 
         <SelectField
           label="Role *"
@@ -401,12 +412,13 @@ export default function CreateUserScreen() {
         />
 
         <Input
-          label="Email"
-          placeholder="e.g. ramesh@example.com"
-          value={form.email}
-          onChangeText={set('email')}
-          keyboardType="email-address"
-          error={errors.email}
+          label="Mobile Number"
+          placeholder="10-digit mobile (optional)"
+          value={form.mobile}
+          onChangeText={set('mobile')}
+          keyboardType="phone-pad"
+          maxLength={10}
+          error={errors.mobile}
         />
 
         <Input
@@ -436,17 +448,17 @@ export default function CreateUserScreen() {
               </View>
             ) : (
               <SelectField
-                label="Assign Manager (optional)"
+                label={form.role === 'FIELD' ? 'Assign Manager *' : 'Assign Manager'}
                 placeholder="Select a manager"
                 value={form.manager_id}
                 displayValue={selectedManagerLabel}
                 onPress={() => setPicker('manager')}
+                error={errors.manager_id}
               />
             )}
           </>
         )}
 
-        {/* PPK Rate — only for FIELD */}
         {form.role === 'FIELD' && (
           <Input
             label="PPK Rate (₹ per km)"
@@ -459,7 +471,6 @@ export default function CreateUserScreen() {
           />
         )}
 
-        {/* ── Submit ── */}
         <View style={styles.submitRow}>
           <Button
             title={submitting ? 'Creating…' : 'Create User'}
@@ -472,7 +483,6 @@ export default function CreateUserScreen() {
         </View>
       </ScrollView>
 
-      {/* ── Pickers ── */}
       <PickerModal
         visible={picker === 'role'}
         title="Select Role"

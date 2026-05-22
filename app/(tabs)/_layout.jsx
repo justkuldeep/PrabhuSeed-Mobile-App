@@ -26,7 +26,8 @@ export default function TabsLayout() {
   const router = useRouter();
   const { queueCount } = useOfflineQueue();
 
-  const isManager = user?.role === 'OWNER' || user?.role === 'MANAGER';
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const isManager = user?.role === 'SUPER_ADMIN' || user?.role === 'OWNER' || user?.role === 'MANAGER';
   const isOwner = user?.role === 'OWNER';
 
   useEffect(() => {
@@ -106,15 +107,15 @@ export default function TabsLayout() {
           tabBarItemStyle: isManager ? undefined : { display: 'none', width: 0 },
         }}
       />
-      {/* Admin tab — only shown to OWNER */}
+      {/* Admin tab — only shown to SUPER_ADMIN */}
       <Tabs.Screen
         name="admin"
         options={{
           tabBarIcon: ({ focused }) => (
             <TabIcon emoji="⚙️" label="Admin" focused={focused} />
           ),
-          tabBarButton: isOwner ? undefined : () => null,
-          tabBarItemStyle: isOwner ? undefined : { display: 'none', width: 0 },
+          tabBarButton: isSuperAdmin ? undefined : () => null,
+          tabBarItemStyle: isSuperAdmin ? undefined : { display: 'none', width: 0 },
         }}
       />
       <Tabs.Screen

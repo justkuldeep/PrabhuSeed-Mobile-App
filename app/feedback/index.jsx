@@ -1,12 +1,19 @@
 /**
- * Department Dashboard — Field Data Entry Module
- * Shows 4 department cards. Tap to browse activities.
+ * Field Data Entry — root screen
+ *
+ * FIELD users        → Department dashboard (select dept → fill forms)
+ * OWNER / MANAGER / SUPER_ADMIN → Summary view (stats + CSV download)
+ *
+ * Back-button fix: intercepts Android hardware back and navigates to
+ * the home tab instead of exiting the app (caused by the <Redirect> in
+ * (tabs)/feedback.jsx which replaces the tab in navigation history).
  */
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import {
   View,
   Text,
   FlatList,
+  ScrollView,
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
@@ -14,20 +21,22 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  BackHandler,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import * as FileSystem from 'expo-file-system';
+import { useRouter, useFocusEffect } from 'expo-router';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Colors, Spacing, Typography, Radius, Shadows } from '../../constants/theme';
 import { activityTypesAPI, feedbackAPI } from '../../services/api';
 import { useOfflineQueue } from '../../hooks/useFeedback';
 import { useAuth } from '../../services/authStore';
 
+// ─── Department config ────────────────────────────────────────────────────────
+
 const DEPT_CONFIG = {
   Marketing: {
     emoji: '📢',
     color: '#3b82f6',
-    gradient: ['#1e40af', '#3b82f6'],
     bg: 'rgba(59,130,246,0.12)',
     border: 'rgba(59,130,246,0.3)',
     desc: 'Campaigns, meetings, dealer visits',
@@ -35,7 +44,6 @@ const DEPT_CONFIG = {
   Production: {
     emoji: '🌾',
     color: '#22c55e',
-    gradient: ['#166534', '#22c55e'],
     bg: 'rgba(34,197,94,0.12)',
     border: 'rgba(34,197,94,0.3)',
     desc: 'Seed distribution, field visits, harvesting',
@@ -43,7 +51,6 @@ const DEPT_CONFIG = {
   'R&D': {
     emoji: '🔬',
     color: '#f59e0b',
-    gradient: ['#92400e', '#f59e0b'],
     bg: 'rgba(245,158,11,0.12)',
     border: 'rgba(245,158,11,0.3)',
     desc: 'Nursery, trials, GOT, threshing',
@@ -51,12 +58,15 @@ const DEPT_CONFIG = {
   Processing: {
     emoji: '⚙️',
     color: '#ef4444',
-    gradient: ['#7f1d1d', '#ef4444'],
     bg: 'rgba(239,68,68,0.12)',
     border: 'rgba(239,68,68,0.3)',
     desc: 'Licensing, intake, processing register',
   },
 };
+
+const MANAGEMENT_ROLES = ['SUPER_ADMIN', 'OWNER', 'MANAGER'];
+
+// ─── DepartmentCard (FIELD view) ──────────────────────────────────────────────
 
 const DepartmentCard = memo(function DepartmentCard({ dept, onPress }) {
   const cfg = DEPT_CONFIG[dept.name] || {
@@ -83,7 +93,9 @@ const DepartmentCard = memo(function DepartmentCard({ dept, onPress }) {
         </View>
       </View>
       <Text style={[styles.deptName, { color: cfg.color }]}>{dept.name}</Text>
-      <Text style={styles.deptDesc} numberOfLines={2}>{cfg.desc || 'Field data collection activities'}</Text>
+      <Text style={styles.deptDesc} numberOfLines={2}>
+        {cfg.desc || 'Field data collection activities'}
+      </Text>
       <View style={[styles.cardArrow, { backgroundColor: cfg.bg }]}>
         <Text style={[styles.cardArrowText, { color: cfg.color }]}>View Activities →</Text>
       </View>
@@ -91,11 +103,10 @@ const DepartmentCard = memo(function DepartmentCard({ dept, onPress }) {
   );
 });
 
-export default function DepartmentDashboard() {
-  const router = useRouter();
-  const { user } = useAuth();
-  const { queueCount, sync, syncing, refreshCount } = useOfflineQueue();
+// ─── FIELD view — Department Dashboard ───────────────────────────────────────
 
+function FieldView({ user, queueCount, sync, syncing }) {
+  const router = useRouter();
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -116,39 +127,33 @@ export default function DepartmentDashboard() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchDepts();
-    refreshCount();
-  }, [fetchDepts, refreshCount]);
+  useEffect(() => { fetchDepts(); }, [fetchDepts]);
 
-  const handlePress = useCallback((deptName) => {
-    router.push(`/feedback/activities?dept=${encodeURIComponent(deptName)}`);
-  }, [router]);
+  const handlePress = useCallback(
+    (deptName) => router.push(`/feedback/activities?dept=${encodeURIComponent(deptName)}`),
+    [router],
+  );
 
   const handleDownloadCSV = useCallback(async () => {
     setDownloading(true);
     try {
-      const res = await feedbackAPI.exportTodayCSV();
+      const res = await feedbackAPI.exportCSV(true); // field users always get today only
       const csvContent = typeof res.data === 'string' ? res.data : String(res.data);
-
       if (!csvContent || csvContent.trim().split('\n').length <= 1) {
         Alert.alert('No Data', "You haven't submitted any feedback forms today.");
         return;
       }
-
       const today = new Date().toISOString().slice(0, 10);
-      const fileName = `field_data_${today}.csv`;
+      const fileName = `my_field_data_${today}.csv`;
       const fileUri = FileSystem.documentDirectory + fileName;
-
       await FileSystem.writeAsStringAsync(fileUri, csvContent, {
         encoding: FileSystem.EncodingType.UTF8,
       });
-
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
         await Sharing.shareAsync(fileUri, {
           mimeType: 'text/csv',
-          dialogTitle: `Field Data — ${today}`,
+          dialogTitle: `My Field Data — ${today}`,
           UTI: 'public.comma-separated-values-text',
         });
       } else {
@@ -161,9 +166,10 @@ export default function DepartmentDashboard() {
     }
   }, []);
 
-  const renderItem = useCallback(({ item }) => (
-    <DepartmentCard dept={item} onPress={handlePress} />
-  ), [handlePress]);
+  const renderItem = useCallback(
+    ({ item }) => <DepartmentCard dept={item} onPress={handlePress} />,
+    [handlePress],
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -179,7 +185,7 @@ export default function DepartmentDashboard() {
           {queueCount > 0 && (
             <TouchableOpacity style={styles.syncChip} onPress={sync} disabled={syncing}>
               <Text style={styles.syncChipText}>
-                {syncing ? '⟳ Syncing…' : `⬆ ${queueCount} pending`}
+                {syncing ? 'Syncing…' : `${queueCount} pending`}
               </Text>
             </TouchableOpacity>
           )}
@@ -189,24 +195,15 @@ export default function DepartmentDashboard() {
             disabled={downloading}
             activeOpacity={0.75}
           >
-            <Text style={styles.csvBtnText}>
-              {downloading ? '⏳' : '⬇ CSV'}
-            </Text>
+            <Text style={styles.csvBtnText}>{downloading ? '...' : 'CSV'}</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Agent name strip */}
+      {/* Agent strip */}
       {user?.name && (
         <View style={styles.agentStrip}>
           <Text style={styles.agentText}>👤 {user.name}</Text>
-          {user?.department && (
-            <View style={[styles.agentDeptBadge, { backgroundColor: (DEPT_CONFIG[user.department] || {}).bg || Colors.primaryMuted }]}>
-              <Text style={[styles.agentDeptText, { color: (DEPT_CONFIG[user.department] || {}).color || Colors.primary }]}>
-                {user.department}
-              </Text>
-            </View>
-          )}
         </View>
       )}
 
@@ -233,7 +230,7 @@ export default function DepartmentDashboard() {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => { setRefreshing(true); fetchDepts(true); refreshCount(); }}
+              onRefresh={() => { setRefreshing(true); fetchDepts(true); }}
               tintColor={Colors.primary}
             />
           }
@@ -242,6 +239,237 @@ export default function DepartmentDashboard() {
     </SafeAreaView>
   );
 }
+
+// ─── MANAGEMENT view — Summary Dashboard ─────────────────────────────────────
+
+function ManagementView({ user }) {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
+  // null | 'all' | 'today'
+  const [downloading, setDownloading] = useState(null);
+
+  const fetchStats = useCallback(async (isRefresh = false) => {
+    if (!isRefresh) setLoading(true);
+    setError(null);
+    try {
+      const res = await feedbackAPI.getStats();
+      setStats(res.data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchStats(); }, [fetchStats]);
+
+  const handleDownloadCSV = useCallback(async (todayOnly) => {
+    const key = todayOnly ? 'today' : 'all';
+    setDownloading(key);
+    try {
+      const res = await feedbackAPI.exportCSV(todayOnly);
+      const csvContent = typeof res.data === 'string' ? res.data : String(res.data);
+      if (!csvContent || csvContent.trim().split('\n').length <= 1) {
+        Alert.alert('No Data', todayOnly
+          ? "No submissions found for today."
+          : "No submissions found.");
+        return;
+      }
+      const today = new Date().toISOString().slice(0, 10);
+      const fileName = todayOnly
+        ? `field_data_today_${today}.csv`
+        : `field_data_all_${today}.csv`;
+      const fileUri = FileSystem.documentDirectory + fileName;
+      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'text/csv',
+          dialogTitle: todayOnly ? `Today's Field Data — ${today}` : `All Field Data — ${today}`,
+          UTI: 'public.comma-separated-values-text',
+        });
+      } else {
+        Alert.alert('Saved', `CSV saved to:\n${fileUri}`);
+      }
+    } catch (err) {
+      Alert.alert('Download Failed', err.message || 'Could not download CSV.');
+    } finally {
+      setDownloading(null);
+    }
+  }, []);
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.background} />
+
+      {/* Header */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.title}>Field Data Overview</Text>
+          <Text style={styles.subtitle}>All submissions across your team</Text>
+        </View>
+      </View>
+
+      {user?.name && (
+        <View style={styles.agentStrip}>
+          <Text style={styles.agentText}>👤 {user.name}</Text>
+        </View>
+      )}
+
+      {loading ? (
+        <View style={styles.centerWrap}>
+          <ActivityIndicator color={Colors.primary} size="large" />
+          <Text style={styles.loadingText}>Loading stats…</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.centerWrap}>
+          <Text style={styles.errorIcon}>⚠️</Text>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => fetchStats()}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: Spacing.xxxl }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => { setRefreshing(true); fetchStats(true); }}
+              tintColor={Colors.primary}
+            />
+          }
+        >
+          {/* Stat cards */}
+          <View style={styles.statsRow}>
+            <View style={[styles.statCard, { borderColor: 'rgba(34,197,94,0.3)', backgroundColor: 'rgba(34,197,94,0.08)' }]}>
+              <Text style={styles.statEmoji}>📋</Text>
+              <Text style={[styles.statNumber, { color: '#22c55e' }]}>
+                {stats?.total_all_time ?? '—'}
+              </Text>
+              <Text style={styles.statLabel}>Total Submissions</Text>
+              <Text style={styles.statSub}>All time</Text>
+            </View>
+
+            <View style={[styles.statCard, { borderColor: 'rgba(59,130,246,0.3)', backgroundColor: 'rgba(59,130,246,0.08)' }]}>
+              <Text style={styles.statEmoji}>📅</Text>
+              <Text style={[styles.statNumber, { color: '#3b82f6' }]}>
+                {stats?.total_today ?? '—'}
+              </Text>
+              <Text style={styles.statLabel}>Today's Submissions</Text>
+              <Text style={styles.statSub}>{new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</Text>
+            </View>
+          </View>
+
+          {/* Download All Data card */}
+          <TouchableOpacity
+            style={[styles.downloadCard, downloading === 'all' && styles.downloadCardDisabled]}
+            onPress={() => handleDownloadCSV(false)}
+            disabled={downloading !== null}
+            activeOpacity={0.8}
+          >
+            <View style={styles.downloadCardLeft}>
+              <Text style={styles.downloadIcon}>📥</Text>
+              <View>
+                <Text style={styles.downloadTitle}>Download All Data</Text>
+                <Text style={styles.downloadSub}>
+                  {stats?.total_all_time
+                    ? `${stats.total_all_time} record${stats.total_all_time !== 1 ? 's' : ''} · CSV format`
+                    : 'All submissions · CSV format'}
+                </Text>
+              </View>
+            </View>
+            {downloading === 'all' ? (
+              <ActivityIndicator color={Colors.primary} size="small" />
+            ) : (
+              <Text style={styles.downloadArrow}>→</Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Download Today's Data card */}
+          <TouchableOpacity
+            style={[styles.downloadCard, { borderColor: 'rgba(59,130,246,0.3)', backgroundColor: 'rgba(59,130,246,0.05)' }, downloading === 'today' && styles.downloadCardDisabled]}
+            onPress={() => handleDownloadCSV(true)}
+            disabled={downloading !== null}
+            activeOpacity={0.8}
+          >
+            <View style={styles.downloadCardLeft}>
+              <Text style={styles.downloadIcon}>📅</Text>
+              <View>
+                <Text style={styles.downloadTitle}>Download Today's Data</Text>
+                <Text style={styles.downloadSub}>
+                  {stats?.total_today
+                    ? `${stats.total_today} record${stats.total_today !== 1 ? 's' : ''} today · CSV format`
+                    : "Today's submissions · CSV format"}
+                </Text>
+              </View>
+            </View>
+            {downloading === 'today' ? (
+              <ActivityIndicator color="#3b82f6" size="small" />
+            ) : (
+              <Text style={[styles.downloadArrow, { color: '#3b82f6' }]}>→</Text>
+            )}
+          </TouchableOpacity>
+
+          <Text style={styles.infoNote}>
+            Field agents fill in forms under their department tabs.{'\n'}
+            Download all submissions or just today's data above.
+          </Text>
+        </ScrollView>
+      )}
+    </SafeAreaView>
+  );
+}
+
+// ─── Root screen — role selector + back-button fix ────────────────────────────
+
+export default function FeedbackRootScreen() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const { queueCount, sync, syncing, refreshCount } = useOfflineQueue();
+
+  const role = user?.role?.toUpperCase?.() || '';
+  const isManagement = MANAGEMENT_ROLES.includes(role);
+
+  // Fix Android back button: redirect sent us outside the tabs stack,
+  // so pressing back would exit the app. Intercept and go home instead.
+  useFocusEffect(
+    useCallback(() => {
+      const onBack = () => {
+        router.replace('/(tabs)');
+        return true; // prevent default (app exit)
+      };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+      return () => sub.remove();
+    }, [router]),
+  );
+
+  useEffect(() => {
+    if (!isManagement) refreshCount();
+  }, [isManagement, refreshCount]);
+
+  if (isManagement) {
+    return <ManagementView user={user} />;
+  }
+
+  return (
+    <FieldView
+      user={user}
+      queueCount={queueCount}
+      sync={sync}
+      syncing={syncing}
+    />
+  );
+}
+
+// ─── Shared styles ────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
@@ -286,16 +514,14 @@ const styles = StyleSheet.create({
   csvBtn: {
     backgroundColor: Colors.primary,
     borderRadius: Radius.full,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 5,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 6,
   },
-  csvBtnDisabled: {
-    opacity: 0.5,
-  },
+  csvBtnDisabled: { opacity: 0.5 },
   csvBtnText: {
     fontSize: Typography.xs,
     color: Colors.textInverse,
-    fontWeight: Typography.semibold,
+    fontWeight: Typography.bold,
   },
   agentStrip: {
     flexDirection: 'row',
@@ -308,15 +534,8 @@ const styles = StyleSheet.create({
     fontSize: Typography.sm,
     color: Colors.textMuted,
   },
-  agentDeptBadge: {
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 3,
-  },
-  agentDeptText: {
-    fontSize: Typography.xs,
-    fontWeight: Typography.semibold,
-  },
+
+  // FIELD — list
   list: {
     padding: Spacing.base,
     gap: Spacing.md,
@@ -378,6 +597,91 @@ const styles = StyleSheet.create({
     fontSize: Typography.sm,
     fontWeight: Typography.semibold,
   },
+
+  // MANAGEMENT — stats
+  statsRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.base,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    padding: Spacing.base,
+    alignItems: 'center',
+    ...Shadows.sm,
+  },
+  statEmoji: { fontSize: 28, marginBottom: Spacing.xs },
+  statNumber: {
+    fontSize: 36,
+    fontWeight: Typography.extrabold,
+    letterSpacing: -1,
+  },
+  statLabel: {
+    fontSize: Typography.sm,
+    fontWeight: Typography.semibold,
+    color: Colors.textPrimary,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  statSub: {
+    fontSize: Typography.xs,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+
+  // MANAGEMENT — download card
+  downloadCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    padding: Spacing.base,
+    marginHorizontal: Spacing.base,
+    marginTop: Spacing.md,
+    ...Shadows.sm,
+  },
+  downloadCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  downloadIcon: { fontSize: 28 },
+  downloadTitle: {
+    fontSize: Typography.base,
+    fontWeight: Typography.bold,
+    color: Colors.textPrimary,
+  },
+  downloadSub: {
+    fontSize: Typography.xs,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  downloadArrow: {
+    fontSize: 20,
+    color: Colors.primary,
+    fontWeight: Typography.bold,
+  },
+  downloadCardDisabled: {
+    opacity: 0.5,
+  },
+
+  infoNote: {
+    marginHorizontal: Spacing.base,
+    marginTop: Spacing.xl,
+    fontSize: Typography.sm,
+    color: Colors.textMuted,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+
+  // Shared states
   centerWrap: {
     flex: 1,
     alignItems: 'center',
@@ -385,10 +689,7 @@ const styles = StyleSheet.create({
     padding: Spacing.xxl,
     gap: Spacing.base,
   },
-  loadingText: {
-    color: Colors.textMuted,
-    fontSize: Typography.sm,
-  },
+  loadingText: { color: Colors.textMuted, fontSize: Typography.sm },
   errorIcon: { fontSize: 40 },
   errorText: {
     color: Colors.textSecondary,

@@ -1,5 +1,5 @@
 /**
- * Admin Panel Tab — OWNER only
+ * Admin Panel Tab — SUPER_ADMIN only
  * Shows all users with role, status, and quick actions.
  * Navigates to /admin/create-user to add new users.
  */
@@ -22,19 +22,20 @@ import { useAuth } from '../../services/authStore';
 import { Colors, Spacing, Typography, Radius } from '../../constants/theme';
 
 const ROLE_META = {
-  MANAGER:  { label: 'Manager',     color: Colors.info,      bg: 'rgba(59,130,246,0.12)',  emoji: '👔' },
-  FIELD:    { label: 'Field Agent', color: Colors.primary,   bg: 'rgba(34,197,94,0.12)',   emoji: '🌾' },
-  ACCOUNTS: { label: 'Accounts',    color: Colors.warning,   bg: 'rgba(245,158,11,0.12)',  emoji: '💼' },
+  OWNER:    { label: 'Owner',        color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)',  emoji: '👑' },
+  MANAGER:  { label: 'Manager',      color: Colors.info,      bg: 'rgba(59,130,246,0.12)',  emoji: '👔' },
+  FIELD:    { label: 'Field Agent',  color: Colors.primary,   bg: 'rgba(34,197,94,0.12)',   emoji: '🌾' },
+  ACCOUNTS: { label: 'Accounts',     color: Colors.warning,   bg: 'rgba(245,158,11,0.12)',  emoji: '💼' },
 };
 
-const ROLE_FILTERS = ['ALL', 'MANAGER', 'FIELD', 'ACCOUNTS'];
+const ROLE_FILTERS = ['ALL', 'OWNER', 'MANAGER', 'FIELD', 'ACCOUNTS'];
 
 export default function AdminScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
 
-  const isOwner = user?.role?.toUpperCase() === 'OWNER';
+  const isSuperAdmin = user?.role?.toUpperCase() === 'SUPER_ADMIN';
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -56,7 +57,6 @@ export default function AdminScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Refresh list whenever the tab comes back into focus (e.g. after creating a user)
   useFocusEffect(
     useCallback(() => {
       load(true);
@@ -81,7 +81,7 @@ export default function AdminScreen() {
             {loading ? 'Loading…' : `${users.length} users · ${activeCount} active`}
           </Text>
         </View>
-        {isOwner && (
+        {isSuperAdmin && (
           <TouchableOpacity
             style={styles.createBtn}
             onPress={() => router.push('/admin/create-user')}
@@ -96,9 +96,10 @@ export default function AdminScreen() {
       {!loading && (
         <View style={styles.statsRow}>
           {[
-            { label: 'Managers',  count: countByRole('MANAGER'),  color: Colors.info },
-            { label: 'Field',     count: countByRole('FIELD'),    color: Colors.primary },
-            { label: 'Accounts',  count: countByRole('ACCOUNTS'), color: Colors.warning },
+            { label: 'Owners',   count: countByRole('OWNER'),    color: '#8b5cf6' },
+            { label: 'Managers', count: countByRole('MANAGER'),  color: Colors.info },
+            { label: 'Field',    count: countByRole('FIELD'),    color: Colors.primary },
+            { label: 'Accounts', count: countByRole('ACCOUNTS'), color: Colors.warning },
           ].map((s) => (
             <View key={s.label} style={styles.statCard}>
               <Text style={[styles.statCount, { color: s.color }]}>{s.count}</Text>
@@ -123,7 +124,7 @@ export default function AdminScreen() {
               onPress={() => setRoleFilter(r)}
             >
               <Text style={[styles.chipText, roleFilter === r && styles.chipTextActive]}>
-                {r === 'ALL' ? `All (${count})` : `${ROLE_META[r]?.label} (${count})`}
+                {r === 'ALL' ? `All (${count})` : `${ROLE_META[r]?.label || r} (${count})`}
               </Text>
             </TouchableOpacity>
           );
@@ -154,7 +155,7 @@ export default function AdminScreen() {
               <Text style={styles.emptyIcon}>👤</Text>
               <Text style={styles.emptyTitle}>No users found</Text>
               <Text style={styles.emptyText}>
-                {isOwner ? 'Tap "+ New User" to create one.' : 'No users in this role.'}
+                Tap "+ New User" to create one.
               </Text>
             </View>
           ) : (
@@ -172,14 +173,12 @@ function UserCard({ user: u }) {
 
   return (
     <View style={[styles.card, !u.is_active && styles.cardInactive]}>
-      {/* Avatar */}
       <View style={[styles.avatar, { backgroundColor: u.is_active ? meta.bg : 'rgba(100,116,139,0.12)' }]}>
         <Text style={[styles.avatarText, { color: u.is_active ? meta.color : Colors.textMuted }]}>
           {initials}
         </Text>
       </View>
 
-      {/* Info */}
       <View style={styles.cardInfo}>
         <View style={styles.nameRow}>
           <Text style={[styles.name, !u.is_active && styles.nameInactive]}>
@@ -194,11 +193,12 @@ function UserCard({ user: u }) {
               {meta.emoji} {meta.label}
             </Text>
           </View>
+          {u.employee_id ? <Text style={styles.hq}>ID: {u.employee_id}</Text> : null}
           {u.hq ? <Text style={styles.hq}>{u.hq}</Text> : null}
           {u.state ? <Text style={styles.hq}>{u.state}</Text> : null}
         </View>
 
-        <Text style={styles.mobile}>📱 {u.mobile}</Text>
+        {u.mobile ? <Text style={styles.mobile}>📱 {u.mobile}</Text> : null}
         {u.email ? <Text style={styles.email}>✉️ {u.email}</Text> : null}
 
         {!u.is_active && (
@@ -248,13 +248,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.surface,
     borderRadius: Radius.md,
-    padding: Spacing.md,
+    padding: Spacing.sm,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  statCount: { fontSize: Typography.xxl, fontWeight: Typography.bold },
-  statLabel: { fontSize: Typography.xs, color: Colors.textMuted, marginTop: 2 },
+  statCount: { fontSize: Typography.xl, fontWeight: Typography.bold },
+  statLabel: { fontSize: 10, color: Colors.textMuted, marginTop: 2 },
 
   filterRow: {
     flexDirection: 'row',

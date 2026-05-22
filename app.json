@@ -17,6 +17,11 @@
       "bundleIdentifier": "com.pga.agritask",
       "config": {
         "googleMapsApiKey": "AIzaSyBhjuSxK3y5CbO9iEkHOTmZ0u_JC0ApeNc"
+      },
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
       }
     },
     "android": {
@@ -25,6 +30,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.pga.agritask",
+      "usesCleartextTraffic": true,
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyBhjuSxK3y5CbO9iEkHOTmZ0u_JC0ApeNc"
