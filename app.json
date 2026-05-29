@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/prabhuseed.png",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "splash": {
       "image": "./assets/prabhuseed.png",
       "resizeMode": "contain",

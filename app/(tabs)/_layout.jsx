@@ -1,9 +1,25 @@
-import { Tabs, useRouter } from 'expo-router';
-import { useEffect } from 'react';
+/**
+ * Tabs layout — CLASS COMPONENT intentionally.
+ *
+ * On Android with New Architecture (Bridgeless Fabric), Expo Router may wrap
+ * layouts in Suspense boundaries. During Suspense retries React's dispatcher
+ * can be null, crashing every hook (useState, useEffect, useContext).
+ * Class components bypass the dispatcher entirely.
+ *
+ * Pattern:
+ *  - Outer TabsLayout (class) → reads AuthContext via Consumer (no hooks)
+ *  - Inner TabsLayoutInner (class) → manages queue count via setState
+ */
+import React from 'react';
+import { Tabs, router } from 'expo-router';
 import { Text, View, StyleSheet } from 'react-native';
-import { useAuth } from '../../services/authStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AuthContext } from '../../services/authStore';
 import { Colors, Typography } from '../../constants/theme';
-import { useOfflineQueue } from '../../hooks/useFeedback';
+
+const QUEUE_KEY = 'feedback_offline_queue';
+
+// ─── Tab icon ─────────────────────────────────────────────────────────────────
 
 function TabIcon({ emoji, label, focused, badge }) {
   return (
@@ -21,121 +37,173 @@ function TabIcon({ emoji, label, focused, badge }) {
   );
 }
 
-export default function TabsLayout() {
-  const { isAuthenticated, loading, user } = useAuth();
-  const router = useRouter();
-  const { queueCount } = useOfflineQueue();
+// ─── Inner tabs renderer (class, no hooks) ────────────────────────────────────
 
-  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
-  const isManager = user?.role === 'SUPER_ADMIN' || user?.role === 'OWNER' || user?.role === 'MANAGER';
+class TabsLayoutInner extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { queueCount: 0 };
+    this._refreshQueueCount = this._refreshQueueCount.bind(this);
+  }
 
-  useEffect(() => {
-    if (!loading && !isAuthenticated) {
+  componentDidMount() {
+    this._checkAuth();
+    this._refreshQueueCount();
+  }
+
+  componentDidUpdate(prevProps) {
+    this._checkAuth(prevProps);
+  }
+
+  _checkAuth(prevProps = {}) {
+    const { loading, isAuthenticated } = this.props;
+    const authChanged =
+      prevProps.loading !== loading ||
+      prevProps.isAuthenticated !== isAuthenticated;
+    if ((authChanged || !prevProps) && !loading && !isAuthenticated) {
       router.replace('/(auth)/login');
     }
-  }, [loading, isAuthenticated]);
+  }
 
-  if (!isAuthenticated) return null;
+  async _refreshQueueCount() {
+    try {
+      const raw = await AsyncStorage.getItem(QUEUE_KEY);
+      const queue = raw ? JSON.parse(raw) : [];
+      this.setState({ queueCount: queue.length });
+    } catch {
+      // AsyncStorage unavailable — keep count at 0
+    }
+  }
 
-  return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: styles.tabBar,
-        tabBarShowLabel: false,
-        tabBarActiveTintColor: Colors.tabActive,
-        tabBarInactiveTintColor: Colors.tabInactive,
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="🏠" label="Home" focused={focused} />
-          ),
+  render() {
+    const { isAuthenticated, user } = this.props;
+    const { queueCount } = this.state;
+
+    if (!isAuthenticated) return null;
+
+    const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+    const isManager =
+      user?.role === 'SUPER_ADMIN' ||
+      user?.role === 'OWNER' ||
+      user?.role === 'MANAGER';
+
+    return (
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: styles.tabBar,
+          tabBarShowLabel: false,
+          tabBarActiveTintColor: Colors.tabActive,
+          tabBarInactiveTintColor: Colors.tabInactive,
         }}
-      />
-      <Tabs.Screen
-        name="tasks"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="✅" label="Tasks" focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="feedback"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon
-              emoji="📝"
-              label="Field"
-              focused={focused}
-              badge={queueCount > 0 ? queueCount : null}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="attendance"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="📍" label="Attend" focused={focused} />
-          ),
-        }}
-      />
-      {/* Tracking tab — only shown to OWNER and MANAGER */}
-      <Tabs.Screen
-        name="tracking"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="🗺️" label="Track" focused={focused} />
-          ),
-          tabBarButton: isManager ? undefined : () => null,
-          tabBarItemStyle: isManager ? undefined : { display: 'none', width: 0 },
-        }}
-      />
-      {/* Team tab — only shown to OWNER and MANAGER */}
-      <Tabs.Screen
-        name="team"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="👥" label="Team" focused={focused} />
-          ),
-          tabBarButton: isManager ? undefined : () => null,
-          tabBarItemStyle: isManager ? undefined : { display: 'none', width: 0 },
-        }}
-      />
-      {/* Admin tab — only shown to SUPER_ADMIN */}
-      <Tabs.Screen
-        name="admin"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="⚙️" label="Admin" focused={focused} />
-          ),
-          tabBarButton: isSuperAdmin ? undefined : () => null,
-          tabBarItemStyle: isSuperAdmin ? undefined : { display: 'none', width: 0 },
-        }}
-      />
-      <Tabs.Screen
-        name="notifications"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="🔔" label="Alerts" focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="👤" label="Profile" focused={focused} />
-          ),
-        }}
-      />
-    </Tabs>
-  );
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <TabIcon emoji="🏠" label="Home" focused={focused} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="tasks"
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <TabIcon emoji="✅" label="Tasks" focused={focused} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="feedback"
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <TabIcon
+                emoji="📝"
+                label="Field"
+                focused={focused}
+                badge={queueCount > 0 ? queueCount : null}
+              />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="attendance"
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <TabIcon emoji="📍" label="Attend" focused={focused} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="tracking"
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <TabIcon emoji="🗺️" label="Track" focused={focused} />
+            ),
+            tabBarButton: isManager ? undefined : () => null,
+            tabBarItemStyle: isManager ? undefined : { display: 'none', width: 0 },
+          }}
+        />
+        <Tabs.Screen
+          name="team"
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <TabIcon emoji="👥" label="Team" focused={focused} />
+            ),
+            tabBarButton: isManager ? undefined : () => null,
+            tabBarItemStyle: isManager ? undefined : { display: 'none', width: 0 },
+          }}
+        />
+        <Tabs.Screen
+          name="admin"
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <TabIcon emoji="⚙️" label="Admin" focused={focused} />
+            ),
+            tabBarButton: isSuperAdmin ? undefined : () => null,
+            tabBarItemStyle: isSuperAdmin ? undefined : { display: 'none', width: 0 },
+          }}
+        />
+        <Tabs.Screen
+          name="notifications"
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <TabIcon emoji="🔔" label="Alerts" focused={focused} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <TabIcon emoji="👤" label="Profile" focused={focused} />
+            ),
+          }}
+        />
+      </Tabs>
+    );
+  }
 }
+
+// ─── Outer class — reads AuthContext via Consumer (zero hooks) ────────────────
+
+export default class TabsLayout extends React.Component {
+  render() {
+    return (
+      <AuthContext.Consumer>
+        {({ isAuthenticated, loading, user }) => (
+          <TabsLayoutInner
+            isAuthenticated={isAuthenticated}
+            loading={loading}
+            user={user}
+          />
+        )}
+      </AuthContext.Consumer>
+    );
+  }
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   tabBar: {
