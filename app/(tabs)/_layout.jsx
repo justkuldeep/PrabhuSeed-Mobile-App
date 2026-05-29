@@ -47,20 +47,18 @@ class TabsLayoutInner extends React.Component {
   }
 
   componentDidMount() {
-    this._checkAuth();
+    // Do NOT navigate here — Root Layout may not be fully mounted yet.
+    // app/index.jsx handles the initial auth redirect.
+    // We only handle session-expiry redirects in componentDidUpdate.
     this._refreshQueueCount();
   }
 
   componentDidUpdate(prevProps) {
-    this._checkAuth(prevProps);
-  }
-
-  _checkAuth(prevProps = {}) {
     const { loading, isAuthenticated } = this.props;
-    const authChanged =
-      prevProps.loading !== loading ||
-      prevProps.isAuthenticated !== isAuthenticated;
-    if ((authChanged || !prevProps) && !loading && !isAuthenticated) {
+    const wasLoading = prevProps.loading;
+    const wasAuthenticated = prevProps.isAuthenticated;
+    // Only redirect if auth state actually changed and user became unauthenticated
+    if (!loading && !isAuthenticated && (wasLoading || wasAuthenticated)) {
       router.replace('/(auth)/login');
     }
   }
