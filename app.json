@@ -4,11 +4,11 @@
     "slug": "agritask",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/prabhuseed.jpg",
+    "icon": "./assets/prabhuseed.png",
     "userInterfaceStyle": "dark",
     "newArchEnabled": false,
     "splash": {
-      "image": "./assets/prabhuseed.jpg",
+      "image": "./assets/prabhuseed.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -26,7 +26,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/prabhuseed.jpg",
+        "foregroundImage": "./assets/prabhuseed.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.pga.agritask",
@@ -49,7 +49,7 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#ffffff",
-          "image": "./assets/prabhuseed.jpg",
+          "image": "./assets/prabhuseed.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "enableFullScreenImage_legacy": false
