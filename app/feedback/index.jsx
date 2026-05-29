@@ -24,7 +24,7 @@ import {
   BackHandler,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { File, Paths } from 'expo-file-system';
+import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Colors, Spacing, Typography, Radius, Shadows } from '../../constants/theme';
 import { activityTypesAPI, feedbackAPI } from '../../services/api';
@@ -204,18 +204,19 @@ function FieldView({ user, queueCount, sync, syncing }) {
       }
       const today = new Date().toISOString().slice(0, 10);
       const fileName = `my_field_data_${today}.csv`;
-      const file = new File(Paths.document, fileName);
-      if (file.exists) file.delete();
-      file.write(csvContent);
+      const fileUri = (FileSystem.documentDirectory || '') + fileName;
+      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
-        await Sharing.shareAsync(file.uri, {
+        await Sharing.shareAsync(fileUri, {
           mimeType: 'text/csv',
           dialogTitle: `My Field Data — ${today}`,
           UTI: 'public.comma-separated-values-text',
         });
       } else {
-        Alert.alert('Saved', `CSV saved to:\n${file.uri}`);
+        Alert.alert('Saved', `CSV saved to:\n${fileUri}`);
       }
     } catch (err) {
       Alert.alert('Download Failed', err.message || 'Could not download CSV.');
@@ -340,18 +341,19 @@ function ManagementView({ user }) {
       const fileName = todayOnly
         ? `field_data_today_${today}.csv`
         : `field_data_all_${today}.csv`;
-      const file = new File(Paths.document, fileName);
-      if (file.exists) file.delete();
-      file.write(csvContent);
+      const fileUri = (FileSystem.documentDirectory || '') + fileName;
+      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
-        await Sharing.shareAsync(file.uri, {
+        await Sharing.shareAsync(fileUri, {
           mimeType: 'text/csv',
           dialogTitle: todayOnly ? `Today's Field Data — ${today}` : `All Field Data — ${today}`,
           UTI: 'public.comma-separated-values-text',
         });
       } else {
-        Alert.alert('Saved', `CSV saved to:\n${file.uri}`);
+        Alert.alert('Saved', `CSV saved to:\n${fileUri}`);
       }
     } catch (err) {
       Alert.alert('Download Failed', err.message || 'Could not download CSV.');
