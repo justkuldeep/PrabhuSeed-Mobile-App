@@ -39,7 +39,7 @@ export default function TasksScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const searchTimer = useRef(null);
 
-  const isManager = user?.role === 'OWNER' || user?.role === 'MANAGER';
+  const isManager = user?.role === 'SUPER_ADMIN' || user?.role === 'OWNER' || user?.role === 'MANAGER';
 
   const load = useCallback(
     (params = {}) => {

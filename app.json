@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/prabhuseed.jpg",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/prabhuseed.jpg",
       "resizeMode": "contain",
@@ -48,9 +48,11 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0f172a",
-          "image": "./assets/splash-icon.png",
-          "imageWidth": 200
+          "backgroundColor": "#ffffff",
+          "image": "./assets/prabhuseed.jpg",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "enableFullScreenImage_legacy": false
         }
       ],
       "expo-font"

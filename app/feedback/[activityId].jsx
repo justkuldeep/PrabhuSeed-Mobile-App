@@ -87,9 +87,9 @@ export default function ActivityFormScreen() {
 
   // Restore draft on mount
   useEffect(() => {
-    restoreDraft().then((draft) => {
-      if (draft?.values) setValues(draft.values);
-    });
+    restoreDraft()
+      .then((draft) => { if (draft?.values) setValues(draft.values); })
+      .catch(() => {}); // ignore corrupted / missing draft
   }, []);
 
   const setValue = useCallback((key, val) => {

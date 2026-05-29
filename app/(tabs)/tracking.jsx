@@ -46,6 +46,7 @@ export default function TrackingScreen() {
   const [error, setError] = useState(null);
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [mapReady, setMapReady] = useState(false); // guard: only zoom after map is mounted
 
   const fetchLive = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -74,20 +75,38 @@ export default function TrackingScreen() {
     return () => clearInterval(timer);
   }, [fetchLive]);
 
-  // Fit map to show all agents when list changes
+  // Auto-zoom: wait for both map to be ready AND employees to be loaded
   useEffect(() => {
-    if (employees.length > 0 && mapRef.current) {
-      const coords = employees
-        .filter((e) => e.lat !== 0 && e.lng !== 0)
-        .map((e) => ({ latitude: e.lat, longitude: e.lng }));
-      if (coords.length > 0) {
-        mapRef.current.fitToCoordinates(coords, {
-          edgePadding: { top: 80, right: 40, bottom: 220, left: 40 },
-          animated: true,
-        });
-      }
+    if (!mapReady || !mapRef.current || employees.length === 0) return;
+
+    const coords = employees
+      .filter((e) => e.lat !== 0 && e.lng !== 0)
+      .map((e) => ({ latitude: e.lat, longitude: e.lng }));
+
+    if (coords.length === 0) return;
+
+    if (coords.length === 1) {
+      // Single active agent — zoom in tightly on them
+      mapRef.current.animateToRegion(
+        {
+          latitude: coords[0].latitude,
+          longitude: coords[0].longitude,
+          latitudeDelta: 0.015,
+          longitudeDelta: 0.015,
+        },
+        600,
+      );
+    } else {
+      // Multiple agents — fit all of them, focus panel on the first active one
+      mapRef.current.fitToCoordinates(coords, {
+        edgePadding: { top: 80, right: 40, bottom: 220, left: 40 },
+        animated: true,
+      });
+      // Highlight the first active agent in the list panel
+      const firstActive = employees.find((e) => e.lat !== 0 && e.lng !== 0);
+      if (firstActive && !selectedAgent) setSelectedAgent(firstActive);
     }
-  }, [employees]);
+  }, [mapReady, employees]);
 
   function focusAgent(agent) {
     setSelectedAgent(agent);
@@ -167,6 +186,7 @@ export default function TrackingScreen() {
             showsCompass
             showsScale
             toolbarEnabled={false}
+            onMapReady={() => setMapReady(true)}
           >
             {employees.map((agent, idx) => {
               if (agent.lat === 0 && agent.lng === 0) return null;

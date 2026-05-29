@@ -25,30 +25,38 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
 
-  const [identifier, setIdentifier] = useState('');
+  const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [mobileError, setMobileError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [apiError, setApiError] = useState('');
 
   async function handleLogin() {
-    const id = identifier.trim();
-    if (!id) {
-      setError('Enter your Employee ID, mobile number, or email');
-      return;
+    const mob = mobile.trim();
+    let valid = true;
+    setMobileError('');
+    setPasswordError('');
+    setApiError('');
+
+    if (!mob) {
+      setMobileError('Enter your mobile number');
+      valid = false;
     }
     if (!password) {
-      setError('Enter your password');
-      return;
+      setPasswordError('Enter your password');
+      valid = false;
     }
-    setError('');
+    if (!valid) return;
+
     setLoading(true);
     try {
-      const res = await authAPI.login(id, password);
+      const res = await authAPI.login(mob, password);
       await login(res.data);
       router.replace('/(tabs)');
     } catch (err) {
-      setError(err.message || 'Login failed. Check your credentials.');
+      setApiError(err.message || 'Login failed. Check your credentials.');
     } finally {
       setLoading(false);
     }
@@ -83,22 +91,23 @@ export default function LoginScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Welcome back</Text>
           <Text style={styles.cardSubtitle}>
-            Sign in with your Employee ID and password
+            Sign in with your mobile number and password
           </Text>
 
           <Input
-            label="Employee ID / Mobile / Email"
-            value={identifier}
+            label="Mobile Number"
+            value={mobile}
             onChangeText={(v) => {
-              setIdentifier(v);
-              setError('');
+              setMobile(v);
+              setMobileError('');
+              setApiError('');
             }}
-            placeholder="e.g. 1  or  9876543210"
-            keyboardType="default"
+            placeholder="e.g. 9876543210"
+            keyboardType="phone-pad"
             autoCapitalize="none"
             autoCorrect={false}
-            error={identifier ? '' : error && !password ? error : ''}
-            hint="Enter your employee ID, mobile number, or email"
+            error={mobileError}
+            hint="Enter your registered mobile number"
           />
 
           <Input
@@ -106,14 +115,22 @@ export default function LoginScreen() {
             value={password}
             onChangeText={(v) => {
               setPassword(v);
-              setError('');
+              setPasswordError('');
+              setApiError('');
             }}
             placeholder="Enter your password"
             secureTextEntry={!showPassword}
-            error={error}
+            error={passwordError}
             rightIcon={<Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁️'}</Text>}
             onRightIconPress={() => setShowPassword((s) => !s)}
           />
+
+          {/* API / server error banner */}
+          {apiError ? (
+            <View style={styles.apiErrorBanner}>
+              <Text style={styles.apiErrorText}>⚠ {apiError}</Text>
+            </View>
+          ) : null}
 
           <Button
             title={loading ? 'Signing in…' : 'Sign In'}
@@ -191,6 +208,20 @@ const styles = StyleSheet.create({
   },
   eyeIcon: {
     fontSize: 18,
+  },
+  apiErrorBanner: {
+    backgroundColor: 'rgba(239,68,68,0.1)',
+    borderWidth: 1,
+    borderColor: Colors.error,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  apiErrorText: {
+    fontSize: Typography.sm,
+    color: Colors.error,
+    textAlign: 'center',
   },
   submitBtn: {
     marginTop: Spacing.md,

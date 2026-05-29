@@ -81,7 +81,13 @@ export default function ActivitiesScreen() {
     setError(null);
     try {
       const res = await activityTypesAPI.list({ department: dept });
-      setActivities(res.data || []);
+      const seen = new Set();
+      const unique = (res.data || []).filter((a) => {
+        if (seen.has(a.name)) return false;
+        seen.add(a.name);
+        return true;
+      });
+      setActivities(unique);
     } catch (err) {
       setError(err.message);
     } finally {

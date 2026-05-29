@@ -2,7 +2,7 @@
  * Home Dashboard Screen
  * Shows KPIs, recent tasks, quick actions
  */
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   RefreshControl,
   TouchableOpacity,
   StyleSheet,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,6 +30,22 @@ export default function HomeScreen() {
   const { user } = useAuth();
   const { data: dashData, loading: dashLoading, fetchDashboard } = useDashboard();
   const { tasks, loading: tasksLoading, fetchTasks } = useTasks();
+
+  // ── Skeleton shimmer: always show for min 2 s, then show real data ──────────
+  const shimmer = useRef(new Animated.Value(0.35)).current;
+  const [minDone, setMinDone] = useState(false);
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmer, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(shimmer, { toValue: 0.35, duration: 700, useNativeDriver: true }),
+      ])
+    ).start();
+    const t = setTimeout(() => setMinDone(true), 2000);
+    return () => clearTimeout(t);
+  }, []);
+  // ────────────────────────────────────────────────────────────────────────────
 
   const load = useCallback(() => {
     fetchDashboard();
@@ -89,8 +106,20 @@ export default function HomeScreen() {
 
       {/* KPI Grid */}
       <Text style={styles.sectionTitle}>Overview</Text>
-      {dashLoading && !dashData ? (
-        <LoadingSpinner message="Loading dashboard..." />
+      {(!minDone || (dashLoading && !dashData)) ? (
+        /* 2-second shimmer skeleton — replaces the flash spinner */
+        <View style={styles.kpiGrid}>
+          <View style={styles.kpiRow}>
+            <Animated.View style={[styles.kpiSkeleton, { opacity: shimmer }]} />
+            <View style={styles.kpiGap} />
+            <Animated.View style={[styles.kpiSkeleton, { opacity: shimmer }]} />
+          </View>
+          <View style={[styles.kpiRow, { marginTop: Spacing.md }]}>
+            <Animated.View style={[styles.kpiSkeleton, { opacity: shimmer }]} />
+            <View style={styles.kpiGap} />
+            <Animated.View style={[styles.kpiSkeleton, { opacity: shimmer }]} />
+          </View>
+        </View>
       ) : (
         <View style={styles.kpiGrid}>
           <View style={styles.kpiRow}>
@@ -274,6 +303,14 @@ const styles = StyleSheet.create({
   },
   kpiGap: {
     width: Spacing.md,
+  },
+  kpiSkeleton: {
+    flex: 1,
+    height: 96,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   actionsRow: {
     flexDirection: 'row',
