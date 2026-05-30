@@ -1,16 +1,25 @@
 import React from 'react';
+import { View } from 'react-native';
 import { router } from 'expo-router';
 
 /**
- * Feedback tab entry point.
- * Class component + static router.replace (no hooks) to avoid
- * New Architecture null-dispatcher crash with <Redirect> / useRouter().
+ * Feedback tab entry point — class component, zero hooks.
+ *
+ * Navigation is deferred via setTimeout(0) so it runs AFTER
+ * the current call stack (navigation container fully mounted).
+ * Calling router.replace() synchronously in componentDidMount
+ * triggers "Attempted to navigate before mounting Root Layout".
  */
 export default class FeedbackTab extends React.Component {
   componentDidMount() {
-    router.replace('/feedback');
+    // Defer to next tick — Root Layout must be fully mounted first
+    setTimeout(() => {
+      router.replace('/feedback');
+    }, 0);
   }
+
   render() {
-    return null;
+    // Return an empty view — redirect happens after mount
+    return <View />;
   }
 }
