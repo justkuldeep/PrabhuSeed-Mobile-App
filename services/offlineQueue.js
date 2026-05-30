@@ -18,13 +18,7 @@ export async function saveDraft(activityTypeId, values) {
 export async function loadDraft(activityTypeId) {
   const key = `${DRAFT_PREFIX}${activityTypeId}`;
   const raw = await AsyncStorage.getItem(key);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    await AsyncStorage.removeItem(key); // clear corrupted draft
-    return null;
-  }
+  return raw ? JSON.parse(raw) : null;
 }
 
 export async function clearDraft(activityTypeId) {

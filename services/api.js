@@ -40,12 +40,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error?.response?.status;
-    // When responseType:'text' is used, data arrives as a raw string — try to parse it
-    let data = error?.response?.data;
-    if (typeof data === 'string') {
-      try { data = JSON.parse(data); } catch { /* keep as string */ }
-    }
-    const detail = data?.detail;
+    const detail = error?.response?.data?.detail;
     let message;
     if (Array.isArray(detail)) {
       message = detail.map((e) => e.msg || JSON.stringify(e)).join(', ');
@@ -58,7 +53,9 @@ api.interceptors.response.use(
         ? 'Request timed out. Check your internet connection.'
         : 'Cannot reach server. Check your internet connection.';
     } else {
-      message = data?.message || `Server error (${status})`;
+      message =
+        error?.response?.data?.message ||
+        `Server error (${status})`;
     }
     return Promise.reject(new Error(message));
   },
@@ -68,13 +65,13 @@ api.interceptors.response.use(
 
 export const authAPI = {
   /**
-   * Login with mobile number + password
+   * Login with employee ID, mobile number, or email + password
    * POST /auth/login
-   * Body: { mobile: "9876543210", password: "..." }
+   * Body: { identifier: "1" | "9876543210" | "user@example.com", password: "..." }
    * Returns: { token, access_token, token_type, user: { id, role, name, mobile } }
    */
-  login: (mobile, password) =>
-    api.post('/auth/login', { mobile, password }),
+  login: (identifier, password) =>
+    api.post('/auth/login', { identifier, password }),
 
   /**
    * Get current authenticated user
@@ -176,42 +173,18 @@ export const feedbackAPI = {
     });
   },
   /**
-   * Fetch all feedback submissions and return them as a JSON array.
-   * The backend has no /feedback/csv endpoint, so we paginate through
-   * /feedback/submissions (max 200 per page) and filter on the client.
-   *
-   * @param {boolean} todayOnly  true → only today's submissions
-   * @returns {Promise<{ data: object[] }>}  same shape as other API calls
+   * Download feedback as CSV.
+   * @param {boolean} todayOnly  true → only today's submissions (management only; field always gets today)
    */
-  exportCSV: async (todayOnly = false) => {
-    const limit = 200;
-    const MAX_PAGES = 50; // safety cap: 50 × 200 = 10,000 records max
-    let skip = 0;
-    let page = 0;
-    const all = [];
-
-    while (page < MAX_PAGES) {
-      const res = await api.get('/feedback/submissions', { params: { skip, limit } });
-      const batch = Array.isArray(res.data) ? res.data : [];
-      all.push(...batch);
-      if (batch.length < limit) break;
-      skip += limit;
-      page += 1;
-    }
-
-    // Client-side date filter
-    let submissions = all;
-    if (todayOnly) {
-      const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
-      submissions = all.filter(
-        (s) => s.submitted_at && String(s.submitted_at).slice(0, 10) === today,
-      );
-    }
-
-    return { data: submissions };
-  },
+  exportCSV: (todayOnly = false) =>
+    api.get('/feedback/submissions/export/csv', {
+      params: { today_only: todayOnly },
+      responseType: 'text',
+      // prevent Axios from JSON-parsing CSV content
+      transformResponse: [(data) => data],
+    }),
   /** Summary stats — total_all_time, total_today */
-  getStats: () => api.get('/feedback/stats'),
+  getStats: () => api.get('/feedback/submissions/stats'),
 };
 
 export default api;

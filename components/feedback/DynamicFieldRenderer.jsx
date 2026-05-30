@@ -329,7 +329,7 @@ function ImageField({ attribute, value, onChange, error }) {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') { setPicking(false); return; }
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.7,
         allowsEditing: false,
       });
@@ -345,7 +345,7 @@ function ImageField({ attribute, value, onChange, error }) {
   const camera = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') return;
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.7, allowsEditing: false });
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.7, allowsEditing: false });
     if (!result.canceled && result.assets?.length) {
       onChange([...uris, result.assets[0].uri]);
     }

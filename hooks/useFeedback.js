@@ -17,13 +17,7 @@ export function useActivityAttributes(activityTypeId) {
     setError(null);
     try {
       const res = await feedbackAPI.getAttributes(activityTypeId);
-      const seen = new Set();
-      const unique = (res.data || []).filter((a) => {
-        if (seen.has(a.field_key)) return false;
-        seen.add(a.field_key);
-        return true;
-      });
-      setAttributes(unique);
+      setAttributes(res.data || []);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -108,17 +102,11 @@ export function useOfflineQueue() {
   const [syncResult, setSyncResult] = useState(null);
 
   const refreshCount = useCallback(async () => {
-    try {
-      const count = await getQueueCount();
-      setQueueCount(count);
-    } catch {
-      // AsyncStorage unavailable — leave count at 0
-    }
+    const count = await getQueueCount();
+    setQueueCount(count);
   }, []);
 
-  useEffect(() => {
-    refreshCount().catch(() => {});
-  }, [refreshCount]);
+  useEffect(() => { refreshCount(); }, [refreshCount]);
 
   const sync = useCallback(async () => {
     setSyncing(true);

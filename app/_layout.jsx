@@ -1,76 +1,54 @@
-import React from 'react';
+import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import {
-  SafeAreaInsetsContext,
-  SafeAreaFrameContext,
-  initialWindowMetrics,
-} from 'react-native-safe-area-context';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider } from '../services/authStore';
 import { Colors } from '../constants/theme';
-import ErrorBoundary from '../components/ui/ErrorBoundary';
-import NavigationReady from '../services/navigationReady';
 
-class SafeAreaProviderCompat extends React.Component {
-  render() {
-    const metrics = initialWindowMetrics ?? {
-      insets: { top: 0, right: 0, bottom: 0, left: 0 },
-      frame: { x: 0, y: 0, width: 0, height: 0 },
-    };
-    return (
-      <SafeAreaInsetsContext.Provider value={metrics.insets}>
-        <SafeAreaFrameContext.Provider value={metrics.frame}>
-          {this.props.children}
-        </SafeAreaFrameContext.Provider>
-      </SafeAreaInsetsContext.Provider>
-    );
-  }
-}
+// Keep splash screen visible while we fetch resources
+SplashScreen.preventAutoHideAsync();
 
-export default class RootLayout extends React.Component {
-  componentDidMount() {
-    // Signal that the navigation container is fully mounted.
-    // All navigation calls queued via NavigationReady.whenReady()
-    // will now execute safely.
-    NavigationReady.setReady();
-  }
+export default function RootLayout() {
+  useEffect(() => {
+    // Hide splash after a brief moment
+    const timer = setTimeout(() => {
+      SplashScreen.hideAsync();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, []);
 
-  render() {
-    return (
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaProviderCompat>
-          <AuthProvider>
-            <StatusBar style="light" backgroundColor={Colors.background} />
-            <ErrorBoundary>
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: Colors.background },
-                  animation: 'slide_from_right',
-                }}
-              >
-                <Stack.Screen name="index" />
-                <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
-                <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
-                <Stack.Screen name="feedback" options={{ animation: 'fade' }} />
-                <Stack.Screen
-                  name="tasks/[id]"
-                  options={{ animation: 'slide_from_right' }}
-                />
-                <Stack.Screen
-                  name="tasks/create"
-                  options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
-                />
-                <Stack.Screen
-                  name="admin"
-                  options={{ animation: 'slide_from_right' }}
-                />
-              </Stack>
-            </ErrorBoundary>
-          </AuthProvider>
-        </SafeAreaProviderCompat>
-      </GestureHandlerRootView>
-    );
-  }
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <StatusBar style="light" backgroundColor={Colors.background} />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: Colors.background },
+              animation: 'slide_from_right',
+            }}
+          >
+            <Stack.Screen name="index" />
+            <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
+            <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+            <Stack.Screen
+              name="tasks/[id]"
+              options={{ animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+              name="tasks/create"
+              options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
+            />
+            <Stack.Screen
+              name="admin"
+              options={{ animation: 'slide_from_right' }}
+            />
+          </Stack>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
 }

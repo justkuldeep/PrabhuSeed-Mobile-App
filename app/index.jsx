@@ -1,61 +1,30 @@
 /**
- * Entry point — redirects to auth or main tabs based on session.
- *
- * CLASS component intentionally — no hooks, zero risk of null-dispatcher
- * crash under New Architecture Suspense boundaries.
- *
- * Expected flow (per Expo Router docs):
- *   Root Layout mounts → Index renders → auth loads → navigate
- *
- * Navigation rules:
- *   ✅ Only navigates in componentDidUpdate (never on first render)
- *   ✅ Always waits for loading === false before navigating
- *   ✅ Returns <LoadingSpinner> while auth state is loading
+ * Entry point — redirects to auth or main tabs based on session
  */
-import React from 'react';
+import { useEffect } from 'react';
+import { useRouter } from 'expo-router';
 import { View } from 'react-native';
-import { router } from 'expo-router';
-import { AuthContext } from '../services/authStore';
-import NavigationReady from '../services/navigationReady';
+import { useAuth } from '../services/authStore';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { Colors } from '../constants/theme';
 
-class IndexInner extends React.Component {
-  _navigate() {
-    NavigationReady.whenReady(() => {
-      if (this.props.isAuthenticated) {
+export default function Index() {
+  const { isAuthenticated, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading) {
+      if (isAuthenticated) {
         router.replace('/(tabs)');
       } else {
         router.replace('/(auth)/login');
       }
-    });
-  }
-
-  componentDidUpdate(prevProps) {
-    const { loading } = this.props;
-    // Navigate only when auth loading finishes (true → false)
-    if (!loading && prevProps.loading) {
-      this._navigate();
     }
-  }
+  }, [loading, isAuthenticated]);
 
-  render() {
-    return (
-      <View style={{ flex: 1, backgroundColor: Colors.background }}>
-        <LoadingSpinner fullScreen message="" />
-      </View>
-    );
-  }
-}
-
-export default class Index extends React.Component {
-  render() {
-    return (
-      <AuthContext.Consumer>
-        {({ isAuthenticated, loading }) => (
-          <IndexInner isAuthenticated={isAuthenticated} loading={loading} />
-        )}
-      </AuthContext.Consumer>
-    );
-  }
+  return (
+    <View style={{ flex: 1, backgroundColor: Colors.background }}>
+      <LoadingSpinner fullScreen message="" />
+    </View>
+  );
 }

@@ -24,7 +24,7 @@ import {
   BackHandler,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Colors, Spacing, Typography, Radius, Shadows } from '../../constants/theme';
 import { activityTypesAPI, feedbackAPI } from '../../services/api';
@@ -65,50 +65,6 @@ const DEPT_CONFIG = {
 };
 
 const MANAGEMENT_ROLES = ['SUPER_ADMIN', 'OWNER', 'MANAGER'];
-
-// ─── CSV helpers ──────────────────────────────────────────────────────────────
-
-/**
- * Escape a single CSV cell value.
- * Wraps in quotes if the value contains commas, quotes, or newlines.
- */
-function escapeCSVCell(value) {
-  const str = value == null ? '' : String(value);
-  return str.includes(',') || str.includes('"') || str.includes('\n')
-    ? `"${str.replace(/"/g, '""')}"`
-    : str;
-}
-
-/**
- * Convert an array of submission objects (FarmerFeedbackListOut) to a CSV string.
- * Returns an empty string when there are no rows.
- */
-function jsonToCSV(rows) {
-  if (!Array.isArray(rows) || rows.length === 0) return '';
-
-  const headers = [
-    'ID', 'Activity Type ID', 'Farmer Name', 'Farmer Phone',
-    'Village', 'Status', 'Submitted At',
-  ];
-  const lines = [headers.join(',')];
-
-  for (const row of rows) {
-    lines.push(
-      [
-        row.id,
-        row.activity_type_id,
-        escapeCSVCell(row.farmer_name),
-        escapeCSVCell(row.farmer_phone),
-        escapeCSVCell(row.village),
-        escapeCSVCell(row.status),
-        escapeCSVCell(row.submitted_at),
-      ].join(','),
-    );
-  }
-
-  // UTF-8 BOM prefix so Excel opens Indian characters correctly
-  return '﻿' + lines.join('\n');
-}
 
 // ─── DepartmentCard (FIELD view) ──────────────────────────────────────────────
 
@@ -161,23 +117,8 @@ function FieldView({ user, queueCount, sync, syncing }) {
     if (!isRefresh) setLoading(true);
     setError(null);
     try {
-      const [deptRes, actRes] = await Promise.all([
-        activityTypesAPI.departments(),
-        activityTypesAPI.list(),
-      ]);
-
-      // Deduplicate activities by name per department to get true counts
-      const seenByDept = {};
-      for (const a of (actRes.data || [])) {
-        if (!seenByDept[a.department]) seenByDept[a.department] = new Set();
-        seenByDept[a.department].add(a.name);
-      }
-
-      const depts = (deptRes.data || []).map((d) => ({
-        ...d,
-        activity_count: seenByDept[d.name]?.size ?? d.activity_count,
-      }));
-      setDepartments(depts);
+      const res = await activityTypesAPI.departments();
+      setDepartments(res.data || []);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -197,14 +138,14 @@ function FieldView({ user, queueCount, sync, syncing }) {
     setDownloading(true);
     try {
       const res = await feedbackAPI.exportCSV(true); // field users always get today only
-      const csvContent = jsonToCSV(res.data);
+      const csvContent = typeof res.data === 'string' ? res.data : String(res.data);
       if (!csvContent || csvContent.trim().split('\n').length <= 1) {
         Alert.alert('No Data', "You haven't submitted any feedback forms today.");
         return;
       }
       const today = new Date().toISOString().slice(0, 10);
       const fileName = `my_field_data_${today}.csv`;
-      const fileUri = (FileSystem.documentDirectory || '') + fileName;
+      const fileUri = FileSystem.documentDirectory + fileName;
       await FileSystem.writeAsStringAsync(fileUri, csvContent, {
         encoding: FileSystem.EncodingType.UTF8,
       });
@@ -303,22 +244,22 @@ function FieldView({ user, queueCount, sync, syncing }) {
 
 function ManagementView({ user }) {
   const [stats, setStats] = useState(null);
-  const [statsLoading, setStatsLoading] = useState(true);
-  const [statsError, setStatsError] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
   // null | 'all' | 'today'
   const [downloading, setDownloading] = useState(null);
 
   const fetchStats = useCallback(async (isRefresh = false) => {
-    if (!isRefresh) setStatsLoading(true);
-    setStatsError(null);
+    if (!isRefresh) setLoading(true);
+    setError(null);
     try {
       const res = await feedbackAPI.getStats();
       setStats(res.data);
     } catch (err) {
-      setStatsError(err.message);
+      setError(err.message);
     } finally {
-      setStatsLoading(false);
+      setLoading(false);
       setRefreshing(false);
     }
   }, []);
@@ -330,7 +271,7 @@ function ManagementView({ user }) {
     setDownloading(key);
     try {
       const res = await feedbackAPI.exportCSV(todayOnly);
-      const csvContent = jsonToCSV(res.data);
+      const csvContent = typeof res.data === 'string' ? res.data : String(res.data);
       if (!csvContent || csvContent.trim().split('\n').length <= 1) {
         Alert.alert('No Data', todayOnly
           ? "No submissions found for today."
@@ -341,7 +282,7 @@ function ManagementView({ user }) {
       const fileName = todayOnly
         ? `field_data_today_${today}.csv`
         : `field_data_all_${today}.csv`;
-      const fileUri = (FileSystem.documentDirectory || '') + fileName;
+      const fileUri = FileSystem.documentDirectory + fileName;
       await FileSystem.writeAsStringAsync(fileUri, csvContent, {
         encoding: FileSystem.EncodingType.UTF8,
       });
@@ -380,32 +321,33 @@ function ManagementView({ user }) {
         </View>
       )}
 
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: Spacing.xxxl }}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => { setRefreshing(true); fetchStats(true); }}
-            tintColor={Colors.primary}
-          />
-        }
-      >
-        {/* Stat cards — independent loading/error, never blocks downloads */}
-        {statsLoading ? (
-          <View style={[styles.statsRow, { justifyContent: 'center', paddingVertical: Spacing.xl }]}>
-            <ActivityIndicator color={Colors.primary} size="small" />
-          </View>
-        ) : statsError ? (
-          <View style={[styles.statsRow, { justifyContent: 'center', paddingVertical: Spacing.md }]}>
-            <TouchableOpacity onPress={() => fetchStats()}>
-              <Text style={{ color: Colors.textMuted, fontSize: Typography.sm }}>
-                ⚠ Could not load stats · tap to retry
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
+      {loading ? (
+        <View style={styles.centerWrap}>
+          <ActivityIndicator color={Colors.primary} size="large" />
+          <Text style={styles.loadingText}>Loading stats…</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.centerWrap}>
+          <Text style={styles.errorIcon}>⚠️</Text>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => fetchStats()}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: Spacing.xxxl }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => { setRefreshing(true); fetchStats(true); }}
+              tintColor={Colors.primary}
+            />
+          }
+        >
+          {/* Stat cards */}
           <View style={styles.statsRow}>
             <View style={[styles.statCard, { borderColor: 'rgba(34,197,94,0.3)', backgroundColor: 'rgba(34,197,94,0.08)' }]}>
               <Text style={styles.statEmoji}>📋</Text>
@@ -425,63 +367,63 @@ function ManagementView({ user }) {
               <Text style={styles.statSub}>{new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</Text>
             </View>
           </View>
-        )}
 
-        {/* Download All Data card — always visible */}
-        <TouchableOpacity
-          style={[styles.downloadCard, downloading === 'all' && styles.downloadCardDisabled]}
-          onPress={() => handleDownloadCSV(false)}
-          disabled={downloading !== null}
-          activeOpacity={0.8}
-        >
-          <View style={styles.downloadCardLeft}>
-            <Text style={styles.downloadIcon}>📥</Text>
-            <View>
-              <Text style={styles.downloadTitle}>Download All Data</Text>
-              <Text style={styles.downloadSub}>
-                {stats?.total_all_time
-                  ? `${stats.total_all_time} record${stats.total_all_time !== 1 ? 's' : ''} · CSV format`
-                  : 'All submissions · CSV format'}
-              </Text>
+          {/* Download All Data card */}
+          <TouchableOpacity
+            style={[styles.downloadCard, downloading === 'all' && styles.downloadCardDisabled]}
+            onPress={() => handleDownloadCSV(false)}
+            disabled={downloading !== null}
+            activeOpacity={0.8}
+          >
+            <View style={styles.downloadCardLeft}>
+              <Text style={styles.downloadIcon}>📥</Text>
+              <View>
+                <Text style={styles.downloadTitle}>Download All Data</Text>
+                <Text style={styles.downloadSub}>
+                  {stats?.total_all_time
+                    ? `${stats.total_all_time} record${stats.total_all_time !== 1 ? 's' : ''} · CSV format`
+                    : 'All submissions · CSV format'}
+                </Text>
+              </View>
             </View>
-          </View>
-          {downloading === 'all' ? (
-            <ActivityIndicator color={Colors.primary} size="small" />
-          ) : (
-            <Text style={styles.downloadArrow}>→</Text>
-          )}
-        </TouchableOpacity>
+            {downloading === 'all' ? (
+              <ActivityIndicator color={Colors.primary} size="small" />
+            ) : (
+              <Text style={styles.downloadArrow}>→</Text>
+            )}
+          </TouchableOpacity>
 
-        {/* Download Today's Data card — always visible */}
-        <TouchableOpacity
-          style={[styles.downloadCard, { borderColor: 'rgba(59,130,246,0.3)', backgroundColor: 'rgba(59,130,246,0.05)' }, downloading === 'today' && styles.downloadCardDisabled]}
-          onPress={() => handleDownloadCSV(true)}
-          disabled={downloading !== null}
-          activeOpacity={0.8}
-        >
-          <View style={styles.downloadCardLeft}>
-            <Text style={styles.downloadIcon}>📅</Text>
-            <View>
-              <Text style={styles.downloadTitle}>Download Today's Data</Text>
-              <Text style={styles.downloadSub}>
-                {stats?.total_today
-                  ? `${stats.total_today} record${stats.total_today !== 1 ? 's' : ''} today · CSV format`
-                  : "Today's submissions · CSV format"}
-              </Text>
+          {/* Download Today's Data card */}
+          <TouchableOpacity
+            style={[styles.downloadCard, { borderColor: 'rgba(59,130,246,0.3)', backgroundColor: 'rgba(59,130,246,0.05)' }, downloading === 'today' && styles.downloadCardDisabled]}
+            onPress={() => handleDownloadCSV(true)}
+            disabled={downloading !== null}
+            activeOpacity={0.8}
+          >
+            <View style={styles.downloadCardLeft}>
+              <Text style={styles.downloadIcon}>📅</Text>
+              <View>
+                <Text style={styles.downloadTitle}>Download Today's Data</Text>
+                <Text style={styles.downloadSub}>
+                  {stats?.total_today
+                    ? `${stats.total_today} record${stats.total_today !== 1 ? 's' : ''} today · CSV format`
+                    : "Today's submissions · CSV format"}
+                </Text>
+              </View>
             </View>
-          </View>
-          {downloading === 'today' ? (
-            <ActivityIndicator color="#3b82f6" size="small" />
-          ) : (
-            <Text style={[styles.downloadArrow, { color: '#3b82f6' }]}>→</Text>
-          )}
-        </TouchableOpacity>
+            {downloading === 'today' ? (
+              <ActivityIndicator color="#3b82f6" size="small" />
+            ) : (
+              <Text style={[styles.downloadArrow, { color: '#3b82f6' }]}>→</Text>
+            )}
+          </TouchableOpacity>
 
-        <Text style={styles.infoNote}>
-          Field agents fill in forms under their department tabs.{'\n'}
-          Download all submissions or just today's data above.
-        </Text>
-      </ScrollView>
+          <Text style={styles.infoNote}>
+            Field agents fill in forms under their department tabs.{'\n'}
+            Download all submissions or just today's data above.
+          </Text>
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }

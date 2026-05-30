@@ -1,86 +1,70 @@
 /**
  * Auth state management using React Context + SecureStore
- *
- * AuthProvider is implemented as a CLASS component intentionally.
- * On Android 16 (API 36) with New Architecture (Bridgeless Fabric), Expo Router wraps
- * root layouts in a Suspense boundary. During concurrent-mode Suspense retries,
- * React's ReactCurrentDispatcher.current can be null, causing all hooks
- * (useState, useEffect, useContext) to throw "Cannot read property 'X' of null".
- * Class components use this.state / componentDidMount instead of hooks and are
- * completely unaffected by the null dispatcher — they bypass it entirely.
+ * Mirrors the web frontend's authStore pattern
  */
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
+import { authAPI } from './api';
 import { STORAGE_KEYS } from '../constants';
 
-export const AuthContext = createContext(null);
+const AuthContext = createContext(null);
 
-export class AuthProvider extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = {
-      user: null,
-      token: null,
-      loading: true,
-    };
-    this.login = this.login.bind(this);
-    this.logout = this.logout.bind(this);
-  }
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
+  const [loading, setLoading] = useState(true); // true while restoring session
 
-  componentDidMount() {
-    this.restoreSession();
-  }
+  // Restore session on app start
+  useEffect(() => {
+    restoreSession();
+  }, []);
 
-  async restoreSession() {
+  async function restoreSession() {
     try {
       const storedToken = await SecureStore.getItemAsync(STORAGE_KEYS.AUTH_TOKEN);
       const storedUser = await SecureStore.getItemAsync(STORAGE_KEYS.USER_DATA);
       if (storedToken && storedUser) {
         const userData = JSON.parse(storedUser);
+        // Normalize role to uppercase in case it was stored lowercase
         if (userData?.role) userData.role = userData.role.toUpperCase();
-        this.setState({ token: storedToken, user: userData });
+        setToken(storedToken);
+        setUser(userData);
       }
     } catch (err) {
       console.warn('Session restore failed:', err);
     } finally {
-      this.setState({ loading: false });
+      setLoading(false);
     }
   }
 
-  async login(tokenData) {
+  async function login(tokenData) {
+    // tokenData shape: { token, access_token, user: { id, role, name, mobile } }
     const jwt = tokenData.token || tokenData.access_token;
+    // Normalize role to uppercase so all role checks work consistently
     const userData = {
       ...tokenData.user,
       role: tokenData.user?.role?.toUpperCase() || tokenData.user?.role,
     };
     await SecureStore.setItemAsync(STORAGE_KEYS.AUTH_TOKEN, jwt);
     await SecureStore.setItemAsync(STORAGE_KEYS.USER_DATA, JSON.stringify(userData));
-    this.setState({ token: jwt, user: userData });
+    setToken(jwt);
+    setUser(userData);
   }
 
-  async logout() {
+  async function logout() {
     await SecureStore.deleteItemAsync(STORAGE_KEYS.AUTH_TOKEN);
     await SecureStore.deleteItemAsync(STORAGE_KEYS.USER_DATA);
-    this.setState({ token: null, user: null });
+    setToken(null);
+    setUser(null);
   }
 
-  render() {
-    const { user, token, loading } = this.state;
-    const isAuthenticated = !!token && !!user;
-    const value = {
-      user,
-      token,
-      loading,
-      isAuthenticated,
-      login: this.login,
-      logout: this.logout,
-    };
-    return (
-      <AuthContext.Provider value={value}>
-        {this.props.children}
-      </AuthContext.Provider>
-    );
-  }
+  const isAuthenticated = !!token && !!user;
+
+  return (
+    <AuthContext.Provider value={{ user, token, loading, isAuthenticated, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {
