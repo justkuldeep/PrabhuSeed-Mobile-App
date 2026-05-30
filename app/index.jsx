@@ -16,19 +16,26 @@ import React from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
 import { AuthContext } from '../services/authStore';
+import NavigationReady from '../services/navigationReady';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { Colors } from '../constants/theme';
 
 class IndexInner extends React.Component {
-  componentDidUpdate(prevProps) {
-    const { isAuthenticated, loading } = this.props;
-    // Only navigate when loading transitions from true→false
-    if (!loading && prevProps.loading) {
-      if (isAuthenticated) {
+  _navigate() {
+    NavigationReady.whenReady(() => {
+      if (this.props.isAuthenticated) {
         router.replace('/(tabs)');
       } else {
         router.replace('/(auth)/login');
       }
+    });
+  }
+
+  componentDidUpdate(prevProps) {
+    const { loading } = this.props;
+    // Navigate only when auth loading finishes (true → false)
+    if (!loading && prevProps.loading) {
+      this._navigate();
     }
   }
 

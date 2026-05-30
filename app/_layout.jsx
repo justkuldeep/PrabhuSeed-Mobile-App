@@ -10,6 +10,7 @@ import {
 import { AuthProvider } from '../services/authStore';
 import { Colors } from '../constants/theme';
 import ErrorBoundary from '../components/ui/ErrorBoundary';
+import NavigationReady from '../services/navigationReady';
 
 class SafeAreaProviderCompat extends React.Component {
   render() {
@@ -28,6 +29,13 @@ class SafeAreaProviderCompat extends React.Component {
 }
 
 export default class RootLayout extends React.Component {
+  componentDidMount() {
+    // Signal that the navigation container is fully mounted.
+    // All navigation calls queued via NavigationReady.whenReady()
+    // will now execute safely.
+    NavigationReady.setReady();
+  }
+
   render() {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
